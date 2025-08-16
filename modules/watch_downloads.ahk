@@ -30,15 +30,26 @@ global SEEN := Map()
 
 ; ---- 开始监听（interval 毫秒） ----
 StartSandboxWatch(interval := 1000, showToast := true) {
+    global DST, SBX_SOURCES, SKIP_EXT, SEEN  ; ★★★ 关键：声明用到的全局变量
     ; 目标目录存在性
     if !DirExist(DST) {
         try DirCreate(DST)
     }
+    ; 路径存在性检查（调试用）
+    for _, p in SBX_SOURCES
+        if !DirExist(p)
+            Toast("⚠️ 不存在：" . p, 1500)
+    
     ; 每个源目录不存在也不报错，只是跳过
     SetTimer(WatchTick.Bind(showToast), interval)
+    
+    ; 启动确认提示
+    if showToast
+        Toast("⏱️ 目录监听已启动", 1000)
 }
 
 WatchTick(showToast) {
+    global DST, SBX_SOURCES, SKIP_EXT, SEEN  ; ★★★ 关键：声明用到的全局变量
     ; 扫每个源目录
     for _, src in SBX_SOURCES {
         if !DirExist(src)
