@@ -21,7 +21,7 @@ StartSandboxWatch() {
     }
 
     ; 每100毫秒扫描一次
-    SetTimer(ScanAndMove, 100)
+    SetTimer(ScanAndMove, 1000)
 }
 
 ; 扫描并移动文件
