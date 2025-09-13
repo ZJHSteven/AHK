@@ -7,8 +7,8 @@
     Send("{Media_Play_Pause}")
 }
 
-; Ctrl + Alt + C → 去换行复制（先复制，再把 CR/LF 都去掉）
-^!c:: {
+; Ctrl + Shift + C → 去换行复制（先复制，再把 CR/LF 都去掉）
+^+c:: {
     Send("^c")
     Sleep(150)
     if !ClipWait(1) {
