@@ -13,9 +13,9 @@ SetWorkingDir A_ScriptDir
 #Include modules\utils.ahk
 #Include modules\hotkeys.ahk
 #Include modules\window_switch.ahk
-#Include modules\watch_downloads.ahk
+; #Include modules\watch_downloads.ahk
 
 ; ---- 启动监听：每 100ms 扫描一次，简单直接 ----
-StartSandboxWatch()
+;StartSandboxWatch()
 
-Toast("🟢 AHK 已启动（沙盒下载夹自动搬运进行中）", 1500)
+;Toast("🟢 AHK 已启动（沙盒下载夹自动搬运进行中）", 1500)
