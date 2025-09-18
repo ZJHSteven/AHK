@@ -7,6 +7,16 @@
     Send("{Media_Play_Pause}")
 }
 
+; Ctrl + Alt + 左箭头 → 上一首
+^!Left:: {
+    Send("{Media_Prev}")
+}
+
+; Ctrl + Alt + 右箭头 → 下一首
+^!Right:: {
+    Send("{Media_Next}")
+}
+
 ; Ctrl + Shift + C → 去换行复制（先复制，再把 CR/LF 都去掉）
 ^+c:: {
     Send("^c")
