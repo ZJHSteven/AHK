@@ -13,6 +13,7 @@ SetWorkingDir A_ScriptDir
 #Include modules\utils.ahk
 #Include modules\hotkeys.ahk
 #Include modules\window_switch.ahk
+;#Include modules\llc_hold_speed.ahk
 ; #Include modules\watch_downloads.ahk
 
 ; ---- 启动监听：每 100ms 扫描一次，简单直接 ----
