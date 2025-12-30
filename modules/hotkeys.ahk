@@ -18,18 +18,34 @@ if !A_IsAdmin {
 ; ============================================
 g_CtrlX_Pending := false        ; 是否处于 Ctrl+X 事务中（用于判定是否需要分流）
 g_CtrlX_Consumed := false       ; 是否已被 Ctrl+X+Space 消费（用于阻止剪切）
+g_CtrlX_XDown := false          ; X 是否处于按下状态（避免依赖 GetKeyState 判定）
 
 ; Ctrl+X 按下：只进入事务，不做阻塞等待，也不立即剪切
 $^x:: {
-    global g_CtrlX_Pending, g_CtrlX_Consumed  ; 声明要写入的全局状态变量
+    global g_CtrlX_Pending, g_CtrlX_Consumed, g_CtrlX_XDown  ; 声明要写入的全局状态变量
     g_CtrlX_Pending := true                   ; 标记“Ctrl+X 事务开始”
     g_CtrlX_Consumed := false                 ; 先假设尚未被 Space 消费
+    g_CtrlX_XDown := true                     ; 记录 X 已按下，供 Space 分流判定
+}
+
+; Ctrl 抬起：若事务仍在，主动清理，避免误触发 Space 或残留状态
+~*Ctrl up:: {
+    global g_CtrlX_Pending, g_CtrlX_Consumed  ; 访问并修改全局状态变量
+    if !g_CtrlX_Pending {                     ; 若没有正在进行的事务
+        return                                ; 直接退出，不影响其他 Ctrl 行为
+    }
+    g_CtrlX_Pending := false                  ; 结束事务，防止后续误判
+    g_CtrlX_Consumed := false                 ; 清空消费标记，回到初始状态
 }
 
 ; X 抬起：若未被 Space 消费，则补发原生 Ctrl+X 剪切
 ~$*x up:: {
-    global g_CtrlX_Pending, g_CtrlX_Consumed  ; 访问全局状态变量
+    global g_CtrlX_Pending, g_CtrlX_Consumed, g_CtrlX_XDown  ; 访问全局状态变量
+    if g_CtrlX_XDown {                         ; 若本次记录为“X 曾按下”
+        g_CtrlX_XDown := false                ; 释放 X 按下状态
+    }
     if !g_CtrlX_Pending {                     ; 如果并未进入 Ctrl+X 事务
+        g_CtrlX_Consumed := false             ; 清理消费标记，避免影响下次
         return                                ; 直接退出，避免影响普通 X 抬起
     }
     g_CtrlX_Pending := false                  ; 事务结束，先清理状态
@@ -41,8 +57,8 @@ $^x:: {
 }
 
 ; 仅在 Ctrl+X 事务中且 X 仍按住时拦截 Space，用于触发 Spotify
-#HotIf g_CtrlX_Pending && GetKeyState("x", "P")
-*Space:: {
+#HotIf g_CtrlX_Pending && g_CtrlX_XDown
+$*Space:: {
     global g_CtrlX_Pending, g_CtrlX_Consumed  ; 访问并修改全局状态变量
     g_CtrlX_Consumed := true                  ; 标记“已消费”，阻止之后剪切
     g_CtrlX_Pending := false                  ; 立即结束事务，避免重复触发
@@ -118,9 +134,11 @@ XButton1:: {
 }
 
 ; Left Ctrl + Space → 回车（<^ 表示只用左 Ctrl）
+#HotIf !g_CtrlX_Pending
 <^Space:: {
     Send("{Enter}")
 }
+#HotIf
 ; Win+Alt+D：一键结束 WPS 相关进程
 #!D::
 {
