@@ -60,7 +60,11 @@ $*x up:: {
 ActivateSpotifyToFront() {
     hwnd := WinExist("ahk_exe Spotify.exe")   ; 尝试查找已存在的 Spotify 窗口
     if hwnd {                                 ; 若找到了窗口句柄
-        WinRestore("ahk_id " hwnd)            ; 确保窗口从最小化状态恢复
+        if WinActive("ahk_id " hwnd) {        ; 若当前前台就是 Spotify（即已显示在最前）
+            WinMinimize("ahk_id " hwnd)       ; 再按一次快捷键就最小化，形成“显示/收起”切换
+            return true                       ; 已处理窗口，返回成功
+        }
+        WinRestore("ahk_id " hwnd)            ; 若窗口处于最小化状态，先还原
         WinShow("ahk_id " hwnd)               ; 确保窗口可见（避免托盘/隐藏）
         WinActivate("ahk_id " hwnd)           ; 将 Spotify 拉到前台
         return true                           ; 已激活窗口，返回成功
