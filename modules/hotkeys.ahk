@@ -8,6 +8,63 @@ if !A_IsAdmin {
     ExitApp
 }
 
+; ============================================
+; Ctrl+X 分流为两键/三键（保留剪切 + 扩展 Ctrl+X+Space）
+; 设计思路：
+; 1) 用“状态变量”标记 Ctrl+X 事务是否进行中（不阻塞、不等待）。
+; 2) Ctrl+X 按下时仅进入事务，不立刻剪切。
+; 3) X 抬起时若未被 Space 消费，则补发原生剪切。
+; 4) 仅在“事务进行中且 X 仍按住”时拦截 Space，触发 Spotify 并吞掉空格。
+; ============================================
+g_CtrlX_Pending := false        ; 是否处于 Ctrl+X 事务中（用于判定是否需要分流）
+g_CtrlX_Consumed := false       ; 是否已被 Ctrl+X+Space 消费（用于阻止剪切）
+
+; Ctrl+X 按下：只进入事务，不做阻塞等待，也不立即剪切
+$^x:: {
+    global g_CtrlX_Pending, g_CtrlX_Consumed  ; 声明要写入的全局状态变量
+    g_CtrlX_Pending := true                   ; 标记“Ctrl+X 事务开始”
+    g_CtrlX_Consumed := false                 ; 先假设尚未被 Space 消费
+}
+
+; X 抬起：若未被 Space 消费，则补发原生 Ctrl+X 剪切
+~$*x up:: {
+    global g_CtrlX_Pending, g_CtrlX_Consumed  ; 访问全局状态变量
+    if !g_CtrlX_Pending {                     ; 如果并未进入 Ctrl+X 事务
+        return                                ; 直接退出，避免影响普通 X 抬起
+    }
+    g_CtrlX_Pending := false                  ; 事务结束，先清理状态
+    if g_CtrlX_Consumed {                     ; 若已被 Ctrl+X+Space 消费
+        g_CtrlX_Consumed := false             ; 清理消费标记，准备下次使用
+        return                                ; 不再剪切，满足“仅触发 Spotify”
+    }
+    Send("^x")                                ; 发送原生剪切（$ 防止递归触发）
+}
+
+; 仅在 Ctrl+X 事务中且 X 仍按住时拦截 Space，用于触发 Spotify
+#HotIf g_CtrlX_Pending && GetKeyState("x", "P")
+*Space:: {
+    global g_CtrlX_Pending, g_CtrlX_Consumed  ; 访问并修改全局状态变量
+    g_CtrlX_Consumed := true                  ; 标记“已消费”，阻止之后剪切
+    g_CtrlX_Pending := false                  ; 立即结束事务，避免重复触发
+    ActivateSpotifyToFront()                  ; 触发自定义动作：唤起 Spotify
+}
+#HotIf
+
+; 小工具函数：优先激活已有 Spotify 窗口，否则再启动
+; 入参：无
+; 返回：true 表示已找到并激活窗口，false 表示仅触发了启动
+ActivateSpotifyToFront() {
+    hwnd := WinExist("ahk_exe Spotify.exe")   ; 尝试查找已存在的 Spotify 窗口
+    if hwnd {                                 ; 若找到了窗口句柄
+        WinRestore("ahk_id " hwnd)            ; 确保窗口从最小化状态恢复
+        WinShow("ahk_id " hwnd)               ; 确保窗口可见（避免托盘/隐藏）
+        WinActivate("ahk_id " hwnd)           ; 将 Spotify 拉到前台
+        return true                           ; 已激活窗口，返回成功
+    }
+    Run("spotify:")                           ; 未找到窗口则启动 Spotify
+    return false                              ; 返回未激活（仅启动）
+}
+
 
 ; Ctrl + Alt + Space -> 优先控制 Spotify 播放/暂停；否则发全局多媒体键
 ^!Space:: {
