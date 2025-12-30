@@ -28,18 +28,8 @@ $^x:: {
     g_CtrlX_XDown := true                     ; 记录 X 已按下，供 Space 分流判定
 }
 
-; Ctrl 抬起：若事务仍在，主动清理，避免误触发 Space 或残留状态
-~*Ctrl up:: {
-    global g_CtrlX_Pending, g_CtrlX_Consumed  ; 访问并修改全局状态变量
-    if !g_CtrlX_Pending {                     ; 若没有正在进行的事务
-        return                                ; 直接退出，不影响其他 Ctrl 行为
-    }
-    g_CtrlX_Pending := false                  ; 结束事务，防止后续误判
-    g_CtrlX_Consumed := false                 ; 清空消费标记，回到初始状态
-}
-
 ; X 抬起：若未被 Space 消费，则补发原生 Ctrl+X 剪切
-~$*x up:: {
+$*x up:: {
     global g_CtrlX_Pending, g_CtrlX_Consumed, g_CtrlX_XDown  ; 访问全局状态变量
     if g_CtrlX_XDown {                         ; 若本次记录为“X 曾按下”
         g_CtrlX_XDown := false                ; 释放 X 按下状态
@@ -48,20 +38,18 @@ $^x:: {
         g_CtrlX_Consumed := false             ; 清理消费标记，避免影响下次
         return                                ; 直接退出，避免影响普通 X 抬起
     }
-    g_CtrlX_Pending := false                  ; 事务结束，先清理状态
-    if g_CtrlX_Consumed {                     ; 若已被 Ctrl+X+Space 消费
-        g_CtrlX_Consumed := false             ; 清理消费标记，准备下次使用
-        return                                ; 不再剪切，满足“仅触发 Spotify”
+    if !g_CtrlX_Consumed {                    ; 若未被 Ctrl+X+Space 消费
+        Send("^x")                            ; 发送原生剪切（$ 防止递归触发）
     }
-    Send("^x")                                ; 发送原生剪切（$ 防止递归触发）
+    g_CtrlX_Pending := false                  ; 事务结束，统一清理状态
+    g_CtrlX_Consumed := false                 ; 清理消费标记，准备下次使用
 }
 
-; 仅在 Ctrl+X 事务中且 X 仍按住时拦截 Space，用于触发 Spotify
+; 仅在 Ctrl+X 事务中且 X 仍按住时：左 Ctrl + Space 触发 Spotify（吞掉空格，不回车）
 #HotIf g_CtrlX_Pending && g_CtrlX_XDown
-$*Space:: {
-    global g_CtrlX_Pending, g_CtrlX_Consumed  ; 访问并修改全局状态变量
+<^Space:: {
+    global g_CtrlX_Consumed                   ; 访问并修改全局状态变量
     g_CtrlX_Consumed := true                  ; 标记“已消费”，阻止之后剪切
-    g_CtrlX_Pending := false                  ; 立即结束事务，避免重复触发
     ActivateSpotifyToFront()                  ; 触发自定义动作：唤起 Spotify
 }
 #HotIf
@@ -134,7 +122,7 @@ XButton1:: {
 }
 
 ; Left Ctrl + Space → 回车（<^ 表示只用左 Ctrl）
-#HotIf !g_CtrlX_Pending
+#HotIf !(g_CtrlX_Pending && g_CtrlX_XDown)
 <^Space:: {
     Send("{Enter}")
 }
