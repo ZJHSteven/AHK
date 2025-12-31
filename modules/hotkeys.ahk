@@ -29,6 +29,8 @@ $^x:: {
 }
 
 ; X 抬起：若未被 Space 消费，则补发原生 Ctrl+X 剪切
+; 只在 Ctrl+X 事务期间才拦截 x up
+#HotIf g_CtrlX_Pending
 $*x up:: {
     global g_CtrlX_Pending, g_CtrlX_Consumed, g_CtrlX_XDown  ; 访问全局状态变量
     if g_CtrlX_XDown {                         ; 若本次记录为“X 曾按下”
@@ -44,6 +46,7 @@ $*x up:: {
     g_CtrlX_Pending := false                  ; 事务结束，统一清理状态
     g_CtrlX_Consumed := false                 ; 清理消费标记，准备下次使用
 }
+#HotIf
 
 ; 仅在 Ctrl+X 事务中且 X 仍按住时：左 Ctrl + Space 触发 Spotify（吞掉空格，不回车）
 #HotIf g_CtrlX_Pending && g_CtrlX_XDown
