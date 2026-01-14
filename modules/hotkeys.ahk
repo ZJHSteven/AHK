@@ -58,19 +58,27 @@ $*x up:: {
 #HotIf
 
 ; 小工具函数：优先激活已有 Spotify 窗口，否则再启动
+; 关键逻辑：先判断“是否最小化”，再判断“是否前台”，避免最小化但仍前台导致反复最小化
 ; 入参：无
-; 返回：true 表示已找到并激活窗口，false 表示仅触发了启动
+; 返回：true 表示已找到并处理窗口，false 表示仅触发了启动
 ActivateSpotifyToFront() {
     hwnd := WinExist("ahk_exe Spotify.exe")   ; 尝试查找已存在的 Spotify 窗口
     if hwnd {                                 ; 若找到了窗口句柄
-        if WinActive("ahk_id " hwnd) {        ; 若当前前台就是 Spotify（即已显示在最前）
-            WinMinimize("ahk_id " hwnd)       ; 再按一次快捷键就最小化，形成“显示/收起”切换
-            return true                       ; 已处理窗口，返回成功
+        winState := WinGetMinMax("ahk_id " hwnd)  ; 获取窗口状态：-1 最小化，0 正常，1 最大化
+        if (winState = -1) {                   ; 若窗口已最小化
+            WinRestore("ahk_id " hwnd)         ; 还原窗口（从最小化恢复）
+            WinShow("ahk_id " hwnd)            ; 确保窗口可见（避免托盘/隐藏）
+            WinActivate("ahk_id " hwnd)        ; 激活到前台，保证可操作
+            return true                        ; 已处理窗口，返回成功
         }
-        WinRestore("ahk_id " hwnd)            ; 若窗口处于最小化状态，先还原
-        WinShow("ahk_id " hwnd)               ; 确保窗口可见（避免托盘/隐藏）
-        WinActivate("ahk_id " hwnd)           ; 将 Spotify 拉到前台
-        return true                           ; 已激活窗口，返回成功
+        if WinActive("ahk_id " hwnd) {         ; 若当前前台就是 Spotify（且未最小化）
+            WinMinimize("ahk_id " hwnd)        ; 再按一次快捷键就最小化，形成“显示/收起”切换
+            return true                        ; 已处理窗口，返回成功
+        }
+        WinRestore("ahk_id " hwnd)             ; 非前台且非最小化：确保处于可见状态
+        WinShow("ahk_id " hwnd)                ; 确保窗口可见（避免托盘/隐藏）
+        WinActivate("ahk_id " hwnd)            ; 将 Spotify 拉到前台
+        return true                            ; 已激活窗口，返回成功
     }
     Run("spotify:")                           ; 未找到窗口则启动 Spotify
     return false                              ; 返回未激活（仅启动）
