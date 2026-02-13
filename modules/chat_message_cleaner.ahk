@@ -256,7 +256,7 @@ ChatStripTomlInlineComment(line) {
             escaped := inQuote                              ; 仅在引号内部才按转义处理
             continue
         }
-        if (ch = """") {                                   ; 双引号切换“是否在字符串中”
+        if (ch = Chr(34)) {                                ; 以 ASCII 码 34 表示双引号，规避连引号写法的解析歧义
             inQuote := !inQuote
             continue
         }
