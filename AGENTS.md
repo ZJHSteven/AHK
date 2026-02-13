@@ -2,6 +2,7 @@
 
 ## 变更记录
 
+- 2026-02-13：聊天消息清洗新增附件噪声过滤：自动删除正文中的 HTML/Markdown 图片片段与纯 `file://` 资源行，并在清洗后正文为空时跳过该消息（不再输出 `[空消息]`），更新 `modules/chat_message_cleaner.ahk`。
 - 2026-02-13：彻底修复聊天清洗模块中的连引号兼容性：在 `ChatStripTomlInlineComment` 与 `ChatParseTomlToken` 中统一改为 `Chr(34)/Chr(92)` 字符常量比较与替换，避免再次触发 `v1 script` 误判与 Reload 失败，更新 `modules/chat_message_cleaner.ahk`。
 - 2026-02-13：修复 `ChatStripTomlInlineComment` 中双引号判定写法兼容性问题：将 `if (ch = \"\"\"\")` 改为 `if (ch = Chr(34))`，避免部分环境误报 v1 语法并导致 Reload 失败，更新 `modules/chat_message_cleaner.ahk`。
 - 2026-02-13：修复聊天昵称 TOML 示例注释格式为标准 `#`（避免编辑器 `unexpected token`），并同步将聊天清洗热键改为 `Ctrl+Win+C`，更新 `config/chat_name_alias.toml`、`modules/chat_message_cleaner.ahk`、`modules/hotkeys.ahk`。

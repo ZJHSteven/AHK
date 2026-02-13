@@ -12,6 +12,7 @@
 ; - 解析规则优先覆盖你当前 QQ 复制样式：`昵称: 02-13 19:26:29` + 下一行内容。
 ; - 若消息正文本来有多行，会合并成单行，便于后续粘贴到大模型或笔记工具。
 ; - TOML 仅实现“昵称映射”所需最小子集（[names] + key=value），简单直观、便于维护。
+; - 会自动清理无语义附件噪声（如 `<img src="file://...">`），避免污染给 AI 的上下文。
 ; ============================================
 
 ; 对外入口：复制并清洗聊天消息
@@ -93,11 +94,40 @@ ChatParseChatMessages(rawText, aliasMap) {
             continue
         }
 
-        currentBodyParts.Push(trimmedLine)                ; 把正文行追加到当前消息缓存
+        cleanedBodyLine := ChatNormalizeMessageBodyLine(trimmedLine) ; 先清理正文里的附件/图片噪声
+        if (cleanedBodyLine = "") {                       ; 清理后为空，说明这行没有可用语义
+            continue
+        }
+        currentBodyParts.Push(cleanedBodyLine)            ; 仅把有效正文追加到当前消息缓存
     }
 
     ChatPushMessage(lines, currentName, currentBodyParts) ; 文件结束时补交最后一条消息
     return lines
+}
+
+; 清理单行消息正文中的“无语义噪声”
+; 入参：
+; - line: 单行正文（通常是 Trim 后文本）
+; 出参：
+; - 返回清理后的正文；若该行应被丢弃则返回空字符串
+; 处理策略：
+; 1) 删除 HTML 图片标签（如 `<img src="file://...">`）。
+; 2) 删除 Markdown 图片片段（如 `![alt](xxx)`）。
+; 3) 若整行是本地 file:// 路径，也直接丢弃。
+ChatNormalizeMessageBodyLine(line) {
+    cleaned := Trim(line, " `t")                          ; 先去首尾空白，统一输入形态
+    if (cleaned = "") {                                   ; 本来就是空行，直接丢弃
+        return ""
+    }
+
+    cleaned := RegExReplace(cleaned, "i)<img\b[^>]*>")    ; 清理 HTML 图片标签（大小写不敏感）
+    cleaned := RegExReplace(cleaned, "i)!\[[^\]]*\]\([^)]+\)") ; 清理 Markdown 图片语法
+    cleaned := Trim(cleaned, " `t")                        ; 删除标签后再收缩空白
+
+    if RegExMatch(cleaned, "i)^file://\S+$") {            ; 纯 file:// 资源路径对 AI 无语义
+        return ""
+    }
+    return cleaned                                         ; 返回清理后的正文（可能是普通文本）
 }
 
 ; 尝试解析“消息头行”（昵称 + 时间）
@@ -139,8 +169,8 @@ ChatPushMessage(lines, name, bodyParts) {
 
     mergedBody := ChatJoinArray(bodyParts, " ")            ; 多行正文合并成一行（以空格分隔）
     mergedBody := Trim(RegExReplace(mergedBody, "\s+"," ")) ; 压缩空白字符，避免出现连续空格
-    if (mergedBody = "") {                                 ; 若正文为空，保留空占位，防止语义丢失
-        mergedBody := "[空消息]"
+    if (mergedBody = "") {                                 ; 清洗后为空，通常是纯图片/附件消息，直接跳过
+        return
     }
 
     lines.Push(name ": " mergedBody)                       ; 输出统一格式：昵称: 内容
