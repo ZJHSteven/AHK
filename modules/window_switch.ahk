@@ -144,6 +144,6 @@ ArrIndexOf(arr, val) {
 Area(r) => (r ? Max(0, r.R - r.L) * Max(0, r.B - r.T) : 0)
 Intersect(a, b) {
     L := Max(a.L, b.L), R := Min(a.R, b.R)
-    T := Max(a.T, b.T), B := Min(a.B, b.T)
+    T := Max(a.T, b.T), B := Min(a.B, b.B)
     return (R > L && B > T) ? { L: L, T: T, R: R, B: B } : 0
 }
