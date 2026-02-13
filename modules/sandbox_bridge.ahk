@@ -139,15 +139,17 @@ SandboxBridgeStageFromSelection() {
 
 ; 对外入口函数：执行“粘贴或清理”（通常由热键调用）
 ; 逻辑：
+; - 无任务状态时：直接执行“目录级手动清理”，不再强依赖内存状态。
 ; - 先统一判断“双击清理”，确保清理逻辑不会被粘贴逻辑抢占。
 ; - 单文件模式：第一次按=粘贴，2.5 秒内第二次按=立即清理（否则走90秒自动清理）。
 ; - 多文件模式：第一次按=进入待清理状态，2.5 秒内第二次按=执行清理（任意窗口都可按）。
 SandboxBridgePasteOrCleanup() {
     global g_SandboxBridgeState, g_SandboxBridgeAutoCleanupMs, g_SandboxBridgeDoubleTapMs
 
+    ; 用户明确要求“手动清理不依赖复制状态”：
+    ; 当当前没有有效任务时，直接尝试清理中转目录里现存内容。
     if !g_SandboxBridgeState.active {
-        Toast("ℹ️ 当前没有中转任务，请先按 Ctrl+Alt+C 执行中转复制")
-        return false
+        return SandboxBridgeCleanupTransitFolders(true)
     }
 
     nowTick := A_TickCount  ; 读取当前时间戳，用于双击窗口判定
@@ -209,6 +211,63 @@ SandboxBridgeAutoCleanup() {
         return  ; 没有任务时无需清理
     }
     SandboxBridgeCleanupStagedFiles(true)  ; 定时触发也走统一清理逻辑
+}
+
+; 目录级手动清理：不依赖 g_SandboxBridgeState 里的任务列表
+; 适用场景：
+; 1) 脚本重启导致内存状态丢失，但中转目录仍有残留文件。
+; 2) 用户想随时清理历史残留，而不是必须先执行一次复制。
+; 入参：showToast=true 时显示提示；false 时静默
+; 返回：true=无失败（可能删除了0项），false=存在删除失败项
+SandboxBridgeCleanupTransitFolders(showToast := true) {
+    global g_SandboxBridgeTargets
+
+    SetTimer(SandboxBridgeAutoCleanup, 0)  ; 目录级清理前先停定时器，避免清理过程中被并发触发
+
+    deletedCount := 0
+    failedCount := 0
+
+    ; 对每个目标根目录的中转子目录执行清理：
+    ; - 先删文件，再删目录，降低遍历中“父目录先消失”导致的异常概率。
+    for _, targetRoot in g_SandboxBridgeTargets {
+        transitDir := SandboxBridgeGetTransitDir(targetRoot)
+        if !DirExist(transitDir) {
+            continue  ; 目录不存在说明该目标当前没有残留
+        }
+
+        Loop Files, transitDir "\*", "F" {
+            filePath := A_LoopFileFullPath
+            try {
+                FileDelete(filePath)
+                deletedCount += 1
+            } catch {
+                failedCount += 1
+            }
+        }
+
+        Loop Files, transitDir "\*", "D" {
+            dirPath := A_LoopFileFullPath
+            try {
+                DirDelete(dirPath, 1)  ; 递归删子目录，确保目录类残留可一次清空
+                deletedCount += 1
+            } catch {
+                failedCount += 1
+            }
+        }
+    }
+
+    if showToast {
+        if (deletedCount = 0 && failedCount = 0)
+            Toast("ℹ️ 当前没有可清理的中转文件")
+        else if (failedCount = 0)
+            Toast("✅ 中转清理完成，共处理 " deletedCount " 项")
+        else
+            Toast("⚠️ 清理结束：成功 " deletedCount " 项，失败 " failedCount " 项")
+    }
+
+    ; 目录级清理执行后，统一清空状态，保证后续流程从干净状态重新开始。
+    SandboxBridgeResetState()
+    return (failedCount = 0)
 }
 
 ; 统一清理函数：删除当前任务复制出来的所有中转文件/目录，并重置状态

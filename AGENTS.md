@@ -2,6 +2,7 @@
 
 ## 变更记录
 
+- 2026-02-13：调整沙盒中转 `Ctrl+Alt+V` 行为：无任务状态下也可直接执行目录级手动清理（扫描 `__AHK_Transit__` 残留并删除），仅在无残留时提示“无可清理项”，更新 `modules/sandbox_bridge.ahk`。
 - 2026-02-13：按调试反馈将 `Toast` 改为仅 `ToolTip`（移除系统 `TrayTip`），并修复沙盒中转 `Ctrl+Alt+V` 流程冲突：双击清理优先于粘贴判定，多文件清理支持任意窗口触发，更新 `modules/utils.ahk`、`modules/sandbox_bridge.ahk`。
 - 2026-02-13：恢复沙盒中转热键为 `Ctrl+Alt+C / Ctrl+Alt+V`（确认当前无占用冲突），抽离 Spotify 工具函数到 `modules/spotify_controls.ahk` 以精简热键清单，删除空文件 `modules/watch_downloads_simple.ahk`，并修正 `modules/watch_downloads.ahk` 扫描间隔注释为 1000ms。
 - 2026-02-13：新增微信/QQ 沙盒文件中转模块与热键（Ctrl+Alt+C / Ctrl+Alt+V），支持单文件自动粘贴与延时清理、多文件双击清理；修复窗口交集计算下边界错误，更新 `modules/sandbox_bridge.ahk`、`modules/hotkeys.ahk`、`modules/window_switch.ahk`。
