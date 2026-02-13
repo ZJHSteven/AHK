@@ -3,10 +3,10 @@
 ; ============================================
 
 ; Toast(msg, ms)
-; - 在 Win10/11 上，系统通知停留时长由系统控制，ms 仅用于辅助的 ToolTip。
-; - 如果你只想系统通知，不要 ToolTip，把 ToolTip 两行注释掉即可。
+; - 只使用 ToolTip（鼠标附近小提示），不再使用系统 TrayTip。
+; - 这样可以避免调试期间系统通知反复堆积、弹出过慢的问题。
+; - ms 表示气泡停留时长（毫秒），到时自动关闭。
 Toast(msg, ms := 1200) {
-    try TrayTip("AutoHotkey", msg)     ; 系统通知（停留时长由系统控制）
-    ToolTip(msg)                        ; 屏幕小气泡
-    SetTimer(() => ToolTip(), -ms)      ; ms 毫秒后关掉小气泡
+    ToolTip(msg)                        ; 显示鼠标附近的小气泡提示
+    SetTimer(() => ToolTip(), -ms)      ; 到时自动清空 ToolTip，避免残留
 }
