@@ -241,6 +241,8 @@ ChatAliasLoadMap(configPath) {
 ; 去掉 TOML 行内注释（# 或 ;），但保留引号字符串内部内容
 ; 例如： "A#B" = "C;D" # 注释  ->  "A#B" = "C;D"
 ChatStripTomlInlineComment(line) {
+    static CHAR_QUOTE := Chr(34)                            ; 双引号字符（"）
+    static CHAR_BACKSLASH := Chr(92)                        ; 反斜杠字符（\）
     inQuote := false                                        ; 是否当前位于双引号字符串内部
     escaped := false                                        ; 上一个字符是否为转义符
 
@@ -252,11 +254,11 @@ ChatStripTomlInlineComment(line) {
             escaped := false
             continue
         }
-        if (ch = "\") {                                    ; 反斜杠用于转义下一个字符
+        if (ch = CHAR_BACKSLASH) {                          ; 反斜杠用于转义下一个字符
             escaped := inQuote                              ; 仅在引号内部才按转义处理
             continue
         }
-        if (ch = Chr(34)) {                                ; 以 ASCII 码 34 表示双引号，规避连引号写法的解析歧义
+        if (ch = CHAR_QUOTE) {                              ; 遇到双引号时切换“是否在字符串中”
             inQuote := !inQuote
             continue
         }
@@ -271,6 +273,9 @@ ChatStripTomlInlineComment(line) {
 ; 解析 TOML token（支持 "xxx"、'xxx'、裸字符串）
 ; 说明：为避免过度复杂，这里只实现昵称映射所需最小能力。
 ChatParseTomlToken(token) {
+    static CHAR_QUOTE := Chr(34)                            ; 双引号字符（"）
+    static CHAR_APOS := "'"                                 ; 单引号字符（'）
+    static CHAR_BACKSLASH := Chr(92)                        ; 反斜杠字符（\）
     text := Trim(token, " `t")                              ; 先做基础去空白
     if (text = "") {
         return ""
@@ -279,13 +284,13 @@ ChatParseTomlToken(token) {
     first := SubStr(text, 1, 1)                             ; 读取首字符用于判断引号类型
     last := SubStr(text, -1)                                ; 读取尾字符用于闭合校验
 
-    if (first = """" && last = """") {                    ; 双引号字符串：支持简单转义
+    if (first = CHAR_QUOTE && last = CHAR_QUOTE) {          ; 双引号字符串：支持简单转义
         inner := SubStr(text, 2, StrLen(text) - 2)
-        inner := StrReplace(inner, "\`"", """")            ; 还原 \" -> "
-        inner := StrReplace(inner, "\\", "\")              ; 还原 \\ -> \
+        inner := StrReplace(inner, CHAR_BACKSLASH . CHAR_QUOTE, CHAR_QUOTE)   ; 还原 \" -> "
+        inner := StrReplace(inner, CHAR_BACKSLASH . CHAR_BACKSLASH, CHAR_BACKSLASH) ; 还原 \\ -> \
         return inner
     }
-    if (first = "'" && last = "'") {                      ; 单引号字符串：按字面量处理
+    if (first = CHAR_APOS && last = CHAR_APOS) {            ; 单引号字符串：按字面量处理
         return SubStr(text, 2, StrLen(text) - 2)
     }
 
