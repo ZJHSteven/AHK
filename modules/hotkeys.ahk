@@ -1,6 +1,7 @@
 #Include utils.ahk
 #Include sandbox_bridge.ahk
 #Include spotify_controls.ahk
+#Include chat_message_cleaner.ahk
 ; ============================================
 ; 你的热键集合（保持与你原脚本的功能一致）
 ; ============================================
@@ -99,6 +100,16 @@ $^+c:: {
     Toast("✅ 已去换行并复制")
 }
 #HotIf
+
+; Ctrl + Alt + Q -> 聊天消息清洗复制
+; 说明：
+; 1) 先执行 Ctrl+C 获取聊天原文。
+; 2) 自动去掉时间戳，并把多行消息压平成单行。
+; 3) 输出格式固定为“昵称: 内容”，每条消息一行。
+; 4) 昵称映射读取 config/chat_name_alias.toml，修改后无需 Reload。
+^!q:: {
+    ChatCopyNormalizeMessages()        ; 具体解析逻辑放在独立模块，热键入口保持简短
+}
 
 ; 鼠标前进键 → 复制
 XButton2:: {

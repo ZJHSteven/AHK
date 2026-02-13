@@ -2,6 +2,7 @@
 
 ## 变更记录
 
+- 2026-02-13：新增聊天消息清洗复制热键 `Ctrl+Alt+Q`，支持 QQ/微信复制文本去时间戳、消息按行压平、按条数提示，并引入外置 `config/chat_name_alias.toml` 昵称映射（按键时实时读取，无需 Reload），更新 `modules/chat_message_cleaner.ahk`、`modules/hotkeys.ahk`、`config/chat_name_alias.toml`。
 - 2026-02-13：调整沙盒中转 `Ctrl+Alt+V` 行为：无任务状态下也可直接执行目录级手动清理（扫描 `__AHK_Transit__` 残留并删除），仅在无残留时提示“无可清理项”，更新 `modules/sandbox_bridge.ahk`。
 - 2026-02-13：按调试反馈将 `Toast` 改为仅 `ToolTip`（移除系统 `TrayTip`），并修复沙盒中转 `Ctrl+Alt+V` 流程冲突：双击清理优先于粘贴判定，多文件清理支持任意窗口触发，更新 `modules/utils.ahk`、`modules/sandbox_bridge.ahk`。
 - 2026-02-13：恢复沙盒中转热键为 `Ctrl+Alt+C / Ctrl+Alt+V`（确认当前无占用冲突），抽离 Spotify 工具函数到 `modules/spotify_controls.ahk` 以精简热键清单，删除空文件 `modules/watch_downloads_simple.ahk`，并修正 `modules/watch_downloads.ahk` 扫描间隔注释为 1000ms。
