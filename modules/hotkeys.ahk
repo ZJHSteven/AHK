@@ -1,5 +1,6 @@
 #Include utils.ahk
 #Include sandbox_bridge.ahk
+#Include spotify_controls.ahk
 ; ============================================
 ; 你的热键集合（保持与你原脚本的功能一致）
 ; ============================================
@@ -57,34 +58,6 @@ $*x up:: {
     ActivateSpotifyToFront()                  ; 触发自定义动作：唤起 Spotify
 }
 #HotIf
-
-; 小工具函数：优先激活已有 Spotify 窗口，否则再启动
-; 关键逻辑：先判断“是否最小化”，再判断“是否前台”，避免最小化但仍前台导致反复最小化
-; 入参：无
-; 返回：true 表示已找到并处理窗口，false 表示仅触发了启动
-ActivateSpotifyToFront() {
-    hwnd := WinExist("ahk_exe Spotify.exe")   ; 尝试查找已存在的 Spotify 窗口
-    if hwnd {                                 ; 若找到了窗口句柄
-        winState := WinGetMinMax("ahk_id " hwnd)  ; 获取窗口状态：-1 最小化，0 正常，1 最大化
-        if (winState = -1) {                   ; 若窗口已最小化
-            WinRestore("ahk_id " hwnd)         ; 还原窗口（从最小化恢复）
-            WinShow("ahk_id " hwnd)            ; 确保窗口可见（避免托盘/隐藏）
-            WinActivate("ahk_id " hwnd)        ; 激活到前台，保证可操作
-            return true                        ; 已处理窗口，返回成功
-        }
-        if WinActive("ahk_id " hwnd) {         ; 若当前前台就是 Spotify（且未最小化）
-            WinMinimize("ahk_id " hwnd)        ; 再按一次快捷键就最小化，形成“显示/收起”切换
-            return true                        ; 已处理窗口，返回成功
-        }
-        WinRestore("ahk_id " hwnd)             ; 非前台且非最小化：确保处于可见状态
-        WinShow("ahk_id " hwnd)                ; 确保窗口可见（避免托盘/隐藏）
-        WinActivate("ahk_id " hwnd)            ; 将 Spotify 拉到前台
-        return true                            ; 已激活窗口，返回成功
-    }
-    Run("spotify:")                           ; 未找到窗口则启动 Spotify
-    return false                              ; 返回未激活（仅启动）
-}
-
 
 ; Ctrl + Alt + Space -> 优先控制 Spotify 播放/暂停；否则发全局多媒体键
 ^!Space:: {
@@ -176,31 +149,4 @@ XButton1:: {
     Sleep(1000)
     Run(cmd, , "Hide")  ; 再来一次
     Toast("已尝试结束 WPS 相关进程。未保存的文档可能已被关闭。")
-}
-  
-  
-  
-  
-; 小工具函数：给 Spotify 发一个 WM_APPCOMMAND 命令
-; appCommand 是命令编号：
-;   14 = 播放/暂停
-;   11 = 下一首
-;   12 = 上一首
-SendSpotifyCommand(appCommand) {
-    hwnd := WinExist("ahk_exe Spotify.exe")
-    if !hwnd {
-        ; 找不到 Spotify 窗口，返回 false，让外面走“退而求其次”的逻辑
-        return false
-    }
-
-    WM_APPCOMMAND := 0x0319
-    ; lParam 高 16 位是命令编号
-    DllCall(
-        "SendMessage",
-        "ptr", hwnd,
-        "uint", WM_APPCOMMAND,
-        "ptr", 0,
-        "ptr", appCommand << 16
-    )
-    return true
 }
