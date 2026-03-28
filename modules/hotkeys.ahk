@@ -1,6 +1,7 @@
 #Include utils.ahk
 #Include sandbox_bridge.ahk
 #Include spotify_controls.ahk
+#Include ctrlx_spotify_combo.ahk
 #Include chat_message_cleaner.ahk
 ; ============================================
 ; 你的热键集合（保持与你原脚本的功能一致）
@@ -13,50 +14,29 @@ if !A_IsAdmin {
 
 ; ============================================
 ; Ctrl+X 分流为两键/三键（保留剪切 + 扩展 Ctrl+X+Space）
-; 设计思路：
-; 1) 用“状态变量”标记 Ctrl+X 事务是否进行中（不阻塞、不等待）。
-; 2) Ctrl+X 按下时仅进入事务，不立刻剪切。
-; 3) X 抬起时若未被 Space 消费，则补发原生剪切。
-; 4) 仅在“事务进行中且 X 仍按住”时拦截 Space，触发 Spotify 并吞掉空格。
+; 具体状态机细节已经抽到 ctrlx_spotify_combo.ahk，
+; 这里的职责只保留“热键入口”，避免热键文件继续膨胀。
 ; ============================================
-g_CtrlX_Pending := false        ; 是否处于 Ctrl+X 事务中（用于判定是否需要分流）
-g_CtrlX_Consumed := false       ; 是否已被 Ctrl+X+Space 消费（用于阻止剪切）
-g_CtrlX_XDown := false          ; X 是否处于按下状态（避免依赖 GetKeyState 判定）
 
-; Ctrl+X 按下：只进入事务，不做阻塞等待，也不立即剪切
+; Ctrl+X 按下：开始一笔短暂的“待判定事务”
+; - 若后续很快跟上 Space，则走 Spotify 分支。
+; - 若没有跟上 Space，则在模块内部自动回落为普通剪切。
 $^x:: {
-    global g_CtrlX_Pending, g_CtrlX_Consumed, g_CtrlX_XDown  ; 声明要写入的全局状态变量
-    g_CtrlX_Pending := true                   ; 标记“Ctrl+X 事务开始”
-    g_CtrlX_Consumed := false                 ; 先假设尚未被 Space 消费
-    g_CtrlX_XDown := true                     ; 记录 X 已按下，供 Space 分流判定
+    CtrlXComboBegin()
 }
 
-; X 抬起：若未被 Space 消费，则补发原生 Ctrl+X 剪切
-; 只在 Ctrl+X 事务期间才拦截 x up
+; X 抬起：这里只更新“X 已抬起”的状态，不再在这里补发剪切。
+; 真正的剪切时机统一由模块内的短时计时器决定。
 #HotIf g_CtrlX_Pending
 $*x up:: {
-    global g_CtrlX_Pending, g_CtrlX_Consumed, g_CtrlX_XDown  ; 访问全局状态变量
-    if g_CtrlX_XDown {                         ; 若本次记录为“X 曾按下”
-        g_CtrlX_XDown := false                ; 释放 X 按下状态
-    }
-    if !g_CtrlX_Pending {                     ; 如果并未进入 Ctrl+X 事务
-        g_CtrlX_Consumed := false             ; 清理消费标记，避免影响下次
-        return                                ; 直接退出，避免影响普通 X 抬起
-    }
-    if !g_CtrlX_Consumed {                    ; 若未被 Ctrl+X+Space 消费
-        Send("^x")                            ; 发送原生剪切（$ 防止递归触发）
-    }
-    g_CtrlX_Pending := false                  ; 事务结束，统一清理状态
-    g_CtrlX_Consumed := false                 ; 清理消费标记，准备下次使用
+    CtrlXComboMarkXUp()
 }
 #HotIf
 
 ; 仅在 Ctrl+X 事务中且 X 仍按住时：左 Ctrl + Space 触发 Spotify（吞掉空格，不回车）
 #HotIf g_CtrlX_Pending && g_CtrlX_XDown
 <^Space:: {
-    global g_CtrlX_Consumed                   ; 访问并修改全局状态变量
-    g_CtrlX_Consumed := true                  ; 标记“已消费”，阻止之后剪切
-    ActivateSpotifyToFront()                  ; 触发自定义动作：唤起 Spotify
+    CtrlXComboConsumeAsSpotify()
 }
 #HotIf
 
