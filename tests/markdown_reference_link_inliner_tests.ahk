@@ -120,7 +120,7 @@ MarkdownTestTitleWithInnerQuotes() {
 MarkdownTestImageReferenceLink() {
     input := "示意图：![图1][img]`n[img]: https://example.com/a.png '封面图'"
     result := MarkdownInlineReferenceLinks(input)
-    expected := "示意图：![图1](<https://example.com/a.png> ""封面图"")"
+    expected := "示意图：![图1](<https://example.com/a.png> " Chr(34) "封面图" Chr(34) ")"
 
     MarkdownAssertTrue(result["changed"], "图片引用-变更标记")
     MarkdownAssertEqual(result["text"], expected, "图片引用-输出文本")
