@@ -65,9 +65,9 @@ MarkdownAssertFalse(value, caseName) {
 
 ; 标准显式引用：`[Zenodo][1]` -> `[Zenodo](<url> "title")`
 MarkdownTestStandardReferenceLink() {
-    input := "出处见 [Zenodo][1]。`n`n[1]: https://zenodo.org/records/14287127 ""Zenodo"""
+    input := "出处见 [Zenodo][1]。`n`n[1]: https://zenodo.org/records/14287127 " Chr(34) "Zenodo" Chr(34)
     result := MarkdownInlineReferenceLinks(input)                       ; 执行纯函数转换
-    expected := "出处见 [Zenodo](<https://zenodo.org/records/14287127> ""Zenodo"")。"
+    expected := "出处见 [Zenodo](<https://zenodo.org/records/14287127> " Chr(34) "Zenodo" Chr(34) ")。"
 
     MarkdownAssertTrue(result["changed"], "标准显式引用-变更标记")      ; 应该识别到有效改写
     MarkdownAssertEqual(result["text"], expected, "标准显式引用-输出文本")
@@ -107,9 +107,10 @@ MarkdownTestCaseInsensitiveLabelMatch() {
 ; AI 常见问题：标题里夹了裸双引号，也应尽量保留下来并转义成可迁移的行内标题
 MarkdownTestTitleWithInnerQuotes() {
     rawTitle := "临床医学五年制第十轮 " Chr(34) "十四五" Chr(34) " 规划教材"
+    escapedTitle := "临床医学五年制第十轮 " Chr(92) Chr(34) "十四五" Chr(92) Chr(34) " 规划教材"
     input := "[Zenodo][1]`n[1]: https://zenodo.org/records/14287127 " Chr(34) rawTitle Chr(34)
     result := MarkdownInlineReferenceLinks(input)
-    expected := "[Zenodo](<https://zenodo.org/records/14287127> ""临床医学五年制第十轮 \""十四五\"" 规划教材"")"
+    expected := "[Zenodo](<https://zenodo.org/records/14287127> " Chr(34) escapedTitle Chr(34) ")"
 
     MarkdownAssertTrue(result["changed"], "裸双引号标题-变更标记")
     MarkdownAssertEqual(result["text"], expected, "裸双引号标题-输出文本")
@@ -155,9 +156,9 @@ MarkdownTestInvalidDefinitionIsIgnored() {
 
 ; 同一个标签在正文中多次出现时，应该全部替换
 MarkdownTestMultipleReferencesShareSameDefinition() {
-    input := "[Zenodo][1] 和 [再次查看][1]。`n[1]: https://zenodo.org/records/42 ""资料页"""
+    input := "[Zenodo][1] 和 [再次查看][1]。`n[1]: https://zenodo.org/records/42 " Chr(34) "资料页" Chr(34)
     result := MarkdownInlineReferenceLinks(input)
-    expected := "[Zenodo](<https://zenodo.org/records/42> ""资料页"") 和 [再次查看](<https://zenodo.org/records/42> ""资料页"")。"
+    expected := "[Zenodo](<https://zenodo.org/records/42> " Chr(34) "资料页" Chr(34) ") 和 [再次查看](<https://zenodo.org/records/42> " Chr(34) "资料页" Chr(34) ")。"
 
     MarkdownAssertTrue(result["changed"], "重复引用-变更标记")
     MarkdownAssertEqual(result["text"], expected, "重复引用-输出文本")
