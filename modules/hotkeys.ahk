@@ -3,6 +3,7 @@
 #Include spotify_controls.ahk
 #Include ctrlx_spotify_combo.ahk
 #Include chat_message_cleaner.ahk
+#Include markdown_reference_link_inliner.ahk
 ; ============================================
 ; 你的热键集合（保持与你原脚本的功能一致）
 ; ============================================
@@ -89,6 +90,15 @@ $^+c:: {
 ; 4) 昵称映射读取 config/chat_name_alias.toml，修改后无需 Reload。
 ^#c:: {
     ChatCopyNormalizeMessages()        ; 具体解析逻辑放在独立模块，热键入口保持简短
+}
+
+; Ctrl + Alt + M -> 把剪贴板里的 Markdown 引用式链接展开成行内链接
+; 说明：
+; 1) 这个热键不主动复制，只处理“当前剪贴板里已经存在的文本”。
+; 2) 适合对 AI 输出做二次整理：把 `[文本][1]` + 文末 `[1]: ...` 改成可独立迁移的行内链接。
+; 3) 若未检测到引用式链接定义，或正文里没有可展开的引用，会保留原剪贴板不动。
+^!m:: {
+    MarkdownClipboardInlineReferenceLinks()  ; 文本转换逻辑放在独立模块，热键层只保留入口
 }
 
 ; 鼠标前进键 → 复制
