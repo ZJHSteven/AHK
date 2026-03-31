@@ -27,3 +27,9 @@
 - 先跑纯函数级自动化测试，确认解析与替换逻辑稳定。
 - 再跑脚本级装载测试，确认新增模块被 `#Include` 后不会触发语法错误。
 - 若环境允许，再补一次对 `main.ahk` 的无交互加载验证，确保主入口不因新模块报错。
+
+### 执行结果
+- 已完成：新增 `modules/markdown_reference_link_inliner.ahk`，并在 `modules/hotkeys.ahk` 接入 `Ctrl+Alt+M` 热键。
+- 已完成：补充 `tests/markdown_reference_link_inliner_tests.ahk`，覆盖标准引用、折叠引用、快捷引用、大小写匹配、图片引用、未命中定义、非法定义等场景。
+- 已验证：使用 `C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe /ErrorStdOut` 运行测试脚本，退出码为 `0`。
+- 已验证：额外执行真实样例冒烟测试，确认 `[Zenodo][1]` 会被展开成 `[Zenodo](<https://...> "资料页")`，并移除文末定义行。
