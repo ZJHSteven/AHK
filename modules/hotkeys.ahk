@@ -101,6 +101,15 @@ $^+c:: {
     MarkdownClipboardInlineReferenceLinks()  ; 文本转换逻辑放在独立模块，热键层只保留入口
 }
 
+; Ctrl + Alt + F12 -> 打开 Codex 预设菜单
+; 说明：
+; 1) 不做“一键轮换”，而是在鼠标位置弹出菜单，让你明确点选目标预设。
+; 2) 菜单会标出当前 live 文件匹配到的预设，未配置完整的预设会禁用。
+; 3) 真正切换逻辑在 codex_profile_switcher.ahk 中，热键层只保留入口。
+^!F12:: {
+    CodexProfilesShowTrayMenu()
+}
+
 ; 鼠标前进键 → 复制
 XButton2:: {
     Send("^c")

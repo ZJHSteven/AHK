@@ -1,5 +1,26 @@
 # ExecPlan
 
+## 2026-05-13 AHK 托盘热键帮助与 Codex 预设切换
+
+### 背景
+- 目标：在 AHK 托盘右键菜单里提供当前热键帮助，并用 AHK 自己管理 Codex 的多套 `auth.json` / `config.toml` 预设。
+- 问题：热键越来越多，靠记忆容易忘；外部 cc-switch 切换状态不够可信，切换成功与否不清晰。
+- 预期结果：托盘可查看热键、打开 Codex 预设菜单、校验预设、打开预设目录；切换成功后用鼠标附近 ToolTip 明确提示。
+
+### 实现步骤
+1. 新增热键帮助显式注册表，不解析注释，不展示禁用模块。
+2. 新增 Codex 预设切换模块，读取 `config/codex_profiles/profiles.ini`，真实预设文件放入被忽略的 `secrets` 目录。
+3. 切换前备份 live 配置，切换后字节级比对，失败时尝试回滚。
+4. 使用 Python helper 校验 JSON/TOML；首次或文件变化后才启动 Python，平时使用缓存。
+5. 补自动化测试，覆盖清单解析、当前状态检测、缓存校验、切换与失败保护。
+
+### 执行结果
+- 已完成：新增 `modules/hotkey_help.ahk`、`modules/codex_profile_switcher.ahk`、`tools/validate_codex_profile.py`。
+- 已完成：新增 `Ctrl+Alt+F12` Codex 预设菜单热键，并在 `main.ahk` 初始化托盘菜单。
+- 已完成：新增 `config/codex_profiles/profiles.ini` 与说明文档；真实 secrets/backups/state 已加入 `.gitignore`。
+- 已验证：`tests/hotkey_help_tests.ahk`、`tests/codex_profile_switcher_tests.ahk`、既有 `tests/markdown_reference_link_inliner_tests.ahk` 均通过。
+- 已验证：`AutoHotkey64.exe /ErrorStdOut /Validate .\main.ahk` 通过。
+
 ## 2026-03-31 Markdown 引用式链接展开热键
 
 ### 背景

@@ -1,0 +1,10 @@
+# Codex 预设切换模块会把真实 auth.json / config.toml 放在 secrets 目录。
+# 这些文件可能包含 API Key / OAuth token，绝不能进入 Git 历史。
+config/codex_profiles/secrets/
+
+# 每次切换前的 live 配置备份只用于本机恢复，也可能包含密钥。
+config/codex_profiles/backups/
+
+# state.ini 只保存本机校验缓存和最后一次切换状态，不需要共享。
+config/codex_profiles/state.ini
+
