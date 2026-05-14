@@ -26,6 +26,7 @@ CodexProfileRunAllTests() {
         CodexProfileTestManifestParse(root)
         CodexProfileTestConfiguredDetection(root)
         CodexProfileTestActiveDetection(root, liveDir)
+        CodexProfileTestTrayMenuCanBeBuilt(root, liveDir)
         CodexProfileTestValidationCache(root)
         CodexProfileTestSwitchWritesBackupAndLive(root, liveDir)
         CodexProfileTestInvalidProfileDoesNotChangeLive(root, liveDir)
@@ -135,6 +136,14 @@ CodexProfileTestActiveDetection(root, liveDir) {
     CodexProfileWriteText(liveDir "\config.toml", "model_provider = `"custom`"`nmodel = `"gpt-test`"`n")
 }
 
+CodexProfileTestTrayMenuCanBeBuilt(root, liveDir) {
+    ; 这个用例专门覆盖真实托盘初始化会走到的菜单构造路径。
+    ; 之前的问题是局部变量 menu 遮蔽了 AHK 内置 Menu 类，
+    ; 普通语法校验不会发现，只有运行到 CodexProfilesBuildTrayMenu() 才会报错。
+    trayMenu := CodexProfilesBuildTrayMenu(root, liveDir)
+    CodexProfileAssertTrue(IsObject(trayMenu), "Codex 预设托盘子菜单应能成功构造")
+}
+
 CodexProfileTestValidationCache(root) {
     global g_CodexProfilesValidationRunCount
     profiles := CodexProfilesLoadManifest(root)
@@ -168,4 +177,3 @@ CodexProfileTestInvalidProfileDoesNotChangeLive(root, liveDir) {
     CodexProfileAssertEqual(FileRead(liveDir "\auth.json", "UTF-8"), beforeAuth, "失败后 auth 不应变化")
     CodexProfileAssertEqual(FileRead(liveDir "\config.toml", "UTF-8"), beforeConfig, "失败后 config 不应变化")
 }
-

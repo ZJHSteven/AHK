@@ -65,7 +65,13 @@ ActivateAndRotateHidden(hwnd) {
 }
 
 SameSideOrAltTab() {
-    active := WinGetID("A")
+    ; AHK Reload / Windows 桌面切换的瞬间，系统可能短暂没有“当前活动窗口”。
+    ; WinGetID("A") 在这种情况下会抛 TargetError；这个功能只是辅助切窗，
+    ; 因此没有活动窗口时直接返回，避免启动阶段弹出错误警告。
+    try active := WinGetID("A")
+    catch {
+        return
+    }
     if !active
         return
 
@@ -103,6 +109,11 @@ SameSideOrAltTab() {
 
 ; ---------- 更新 HiddenList ----------
 UpdateHiddenList() {
+    global HiddenList
+
+    ; 这个函数会重建全局 HiddenList。AHK v2 的函数默认是局部变量作用域，
+    ; 如果不声明 global，HiddenList := [] 只会创建一个同名局部数组，
+    ; SmartSwitch() 后续读取到的仍然是旧的全局数组。
     HiddenList := []  ; 清空
 
     MonitorGetWorkArea(1, &L, &T, &R, &B)

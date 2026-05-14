@@ -5,6 +5,8 @@
 ; 这个测试只检查显式注册表的内容，不打开真实 Gui。
 ; ============================================
 
+#Include ..\modules\utils.ahk
+#Include ..\modules\codex_profile_switcher.ahk
 #Include ..\modules\hotkey_help.ahk
 
 global g_TestPassCount := 0
@@ -22,6 +24,7 @@ HotkeyHelpRunAllTests() {
     HotkeyHelpTestContainsCodexMenuHotkey()
     HotkeyHelpTestDoesNotListDisabledLlcModule()
     HotkeyHelpTestDisplayTextHasReadableGroups()
+    HotkeyHelpTestTrayInitializationCanRun()
 }
 
 HotkeyHelpAssertTrue(value, caseName) {
@@ -59,3 +62,43 @@ HotkeyHelpTestDisplayTextHasReadableGroups() {
     HotkeyHelpAssertTrue(InStr(text, "[窗口 / 系统]"), "应包含窗口系统分组")
 }
 
+HotkeyHelpTestTrayInitializationCanRun() {
+    ; 这个用例模拟 main.ahk 启动阶段的托盘菜单挂载。
+    ; 重点不是检查视觉效果，而是确保 A_TrayMenu.Add("Codex 预设", 子菜单对象)
+    ; 这条真实启动路径不会因为参数类型、菜单对象构造等问题在 Reload 时弹错。
+    root := A_Temp "\ahk_hotkey_help_tray_test_" A_TickCount
+    liveDir := root "\live"
+    try {
+        HotkeyHelpWriteText(root "\profiles.ini", "
+        (
+[haibao]
+display_name=海豹云-天才程序员
+auth_path=secrets\haibao\auth.json
+config_path=secrets\haibao\config.toml
+        )")
+        HotkeyHelpWriteText(root "\secrets\haibao\auth.json", "{`"OPENAI_API_KEY`":`"test-key`"}")
+        HotkeyHelpWriteText(root "\secrets\haibao\config.toml", "model = `"gpt-test`"`n")
+        HotkeyHelpWriteText(liveDir "\auth.json", "{`"OPENAI_API_KEY`":`"test-key`"}")
+        HotkeyHelpWriteText(liveDir "\config.toml", "model = `"gpt-test`"`n")
+
+        AhkToolkitInitializeTrayMenu(root, liveDir)
+        HotkeyHelpAssertTrue(true, "托盘菜单初始化应能执行完成")
+    } finally {
+        if DirExist(root) {
+            try DirDelete(root, true)
+        }
+    }
+}
+
+HotkeyHelpWriteText(path, text) {
+    ; 测试辅助函数：写入文本前先确保父目录存在。
+    ; 只写 A_Temp 下的临时文件，不碰真实 Codex 配置。
+    SplitPath(path, , &dir)
+    if !DirExist(dir) {
+        DirCreate(dir)
+    }
+    if FileExist(path) {
+        FileDelete(path)
+    }
+    FileAppend(text, path, "UTF-8")
+}

@@ -115,20 +115,22 @@ HotkeyHelpCopyList(*) {
 }
 
 ; 初始化系统托盘菜单。
-; 入参：无。
+; 入参：
+; - root：Codex 预设根目录；正常启动时留空，测试时可传临时目录。
+; - liveDir：Codex live 目录；正常启动时留空，测试时可传临时目录。
 ; 出参：无。
 ; 说明：
 ; - A_TrayMenu 是 AutoHotkey v2 官方托盘菜单对象。
 ; - 这里保留标准 Reload / Exit 等菜单项，避免破坏 AHK 默认操作习惯。
-AhkToolkitInitializeTrayMenu() {
-    CodexProfilesEnsureLayout()
+AhkToolkitInitializeTrayMenu(root := "", liveDir := "") {
+    root := (root = "") ? CodexProfilesRoot() : root
+    CodexProfilesEnsureLayout(root)
 
     A_TrayMenu.Add()
     A_TrayMenu.Add("查看热键", HotkeyHelpShowWindow)
-    A_TrayMenu.Add("Codex 预设", CodexProfilesBuildTrayMenu())
+    A_TrayMenu.Add("Codex 预设", CodexProfilesBuildTrayMenu(root, liveDir))
     A_TrayMenu.Add("打开 Codex 预设目录", CodexProfilesOpenRoot)
     A_TrayMenu.Add("校验 Codex 预设", CodexProfilesValidateAllFromTray)
     A_TrayMenu.Add()
     A_TrayMenu.AddStandard()
 }
-

@@ -493,13 +493,19 @@ CodexProfilesPruneBackups(root := "", limit := 20) {
 }
 
 ; 构造托盘 Codex 预设子菜单。
-; 入参：无。
+; 入参：
+; - root：预设根目录；正常运行时留空，自动使用 config/codex_profiles。
+; - liveDir：Codex 当前生效目录；正常运行时留空，自动使用 %USERPROFILE%\.codex。
 ; 出参：Menu 对象。
-CodexProfilesBuildTrayMenu(*) {
-    root := CodexProfilesRoot()
+CodexProfilesBuildTrayMenu(root := "", liveDir := "", *) {
+    ; 注意：AutoHotkey 变量名不区分大小写。
+    ; 如果这里把局部变量命名为 menu，表达式 menu := Menu() 会让右侧 Menu
+    ; 被解释成“同一个还没赋值的局部变量”，而不是 AHK 内置 Menu 类。
+    ; 所以这里必须使用 profileMenu 这类不会遮蔽内置类名的变量名。
+    root := (root = "") ? CodexProfilesRoot() : root
     CodexProfilesEnsureLayout(root)
-    activeId := CodexProfilesDetectActiveId(root)
-    menu := Menu()
+    activeId := CodexProfilesDetectActiveId(root, liveDir)
+    profileMenu := Menu()
 
     for _, profile in CodexProfilesLoadManifest(root) {
         configured := CodexProfileIsConfigured(profile)
@@ -512,16 +518,16 @@ CodexProfilesBuildTrayMenu(*) {
             label .= " [未配置]"
         }
 
-        menu.Add(label, CodexProfilesMakeSwitchHandler(profile["id"]))
+        profileMenu.Add(label, CodexProfilesMakeSwitchHandler(profile["id"]))
         if !configured {
-            menu.Disable(label)
+            profileMenu.Disable(label)
         }
     }
 
-    menu.Add()
-    menu.Add("打开预设目录", CodexProfilesOpenRoot)
-    menu.Add("校验全部预设", CodexProfilesValidateAllFromTray)
-    return menu
+    profileMenu.Add()
+    profileMenu.Add("打开预设目录", CodexProfilesOpenRoot)
+    profileMenu.Add("校验全部预设", CodexProfilesValidateAllFromTray)
+    return profileMenu
 }
 
 ; 生成绑定 profileId 的菜单回调。
@@ -583,4 +589,3 @@ CodexProfilesValidateAllFromTray(*) {
 
     Toast("Codex 预设校验完成：通过 " okCount "，失败 " failCount "，未配置 " skippedCount, 2600)
 }
-
