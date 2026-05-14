@@ -8,3 +8,5 @@ config/codex_profiles/backups/
 # state.ini 只保存本机校验缓存和最后一次切换状态，不需要共享。
 config/codex_profiles/state.ini
 
+# 本机诊断日志可能包含窗口标题、文件路径等个人环境信息，只用于排障。
+logs/

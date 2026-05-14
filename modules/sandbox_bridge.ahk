@@ -35,6 +35,47 @@ global g_SandboxBridgeState := {                              ; 用对象保存�
     lastCleanupTapTick: 0                                     ; 记录上次按 Ctrl+Alt+V 的时刻，用于双击清理
 }
 
+; 计算项目根目录。
+; 入参：无。
+; 返回：项目根目录绝对路径。
+; 说明：
+; - 不能直接用 A_ScriptDir，因为测试脚本运行时 A_ScriptDir 会指向 tests 目录。
+; - A_LineFile 在函数内会指向当前模块文件，因此可稳定反推 D:\Workspace\AHK。
+SandboxBridgeProjectRoot() {
+    SplitPath(A_LineFile, , &moduleDir)
+    return RegExReplace(moduleDir, "\\modules$")
+}
+
+; 计算沙盒中转诊断日志路径。
+; 入参：无。
+; 返回：logs\sandbox_bridge.log 的绝对路径。
+; 说明：
+; - logs 目录已加入 .gitignore，避免把本机文件路径、窗口标题等个人诊断信息提交。
+; - 这个日志只记录路径、窗口、分支结果，不记录文件内容。
+SandboxBridgeLogPath() {
+    return SandboxBridgeProjectRoot() "\logs\sandbox_bridge.log"
+}
+
+; 写一行沙盒中转诊断日志。
+; 入参：
+; - message：一行人类可读的诊断信息。
+; 返回：无。
+; 说明：
+; - 日志失败不能影响热键主流程，所以所有文件 IO 都放在 try/catch 里静默兜底。
+; - 这里故意不做复杂日志框架，保持 AHK 工具脚本可读、可控。
+SandboxBridgeLog(message) {
+    logPath := SandboxBridgeLogPath()
+    SplitPath(logPath, , &logDir)
+    try {
+        if !DirExist(logDir) {
+            DirCreate(logDir)
+        }
+        FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " " message "`r`n", logPath, "UTF-8")
+    } catch {
+        ; 日志只是排障辅助，写失败时不能打断复制/粘贴主流程。
+    }
+}
+
 ; 对外入口函数：执行“中转复制”（通常由热键调用）
 ; 入参：无（内部会主动读取当前选中项）
 ; 返回：true=成功创建任务，false=失败
@@ -50,9 +91,12 @@ SandboxBridgeStageFromSelection() {
 
     selectedItems := SandboxBridgeCaptureSelectedPaths()  ; 读取当前选中项（文件/目录/多选）
     if (selectedItems.Length = 0) {
-        Toast("❌ 未检测到可用选中项，请先在资源管理器中选中文件/文件夹")
+        SandboxBridgeLog("stage failed: no selected file-system paths were captured")
+        Toast("❌ 未拿到真实文件路径；已写日志 logs\\sandbox_bridge.log")
         return false
     }
+
+    SandboxBridgeLog("stage selection count=" selectedItems.Length " items=" SandboxBridgeJoinForLog(selectedItems))
 
     SandboxBridgeResetState()                ; 初始化新任务状态，避免旧字段干扰
     g_SandboxBridgeState.sourceItems := selectedItems  ; 记录源项列表，便于后续排查和提示
@@ -309,36 +353,84 @@ SandboxBridgeCleanupStagedFiles(showToast := true) {
 
 ; 抓取当前选中文件/目录列表（通过 Explorer 的 Ctrl+C 结果读取）
 ; 注意：本函数会临时占用剪贴板，但会在 finally 中恢复原剪贴板。
+; 诊断策略：
+; - 暂时不改变读取方案，只把关键过程写入 logs\sandbox_bridge.log。
+; - 这样你复现一次后，我们可以从日志判断是焦点问题、剪贴板问题、路径解析问题，还是 FileExist 判定问题。
 SandboxBridgeCaptureSelectedPaths() {
     selected := []                                ; 返回值：路径数组
     dedup := Map()                                ; 去重，防止重复路径
     clipBackup := ClipboardAll()                  ; 完整备份当前剪贴板（含二进制格式）
 
     try {
+        try {
+            activeHwnd := WinGetID("A")
+            activeExe := StrLower(WinGetProcessName("ahk_id " activeHwnd))
+            activeTitle := WinGetTitle("ahk_id " activeHwnd)
+            SandboxBridgeLog("capture begin: hwnd=" activeHwnd " exe=" activeExe " title=" activeTitle)
+        } catch as err {
+            SandboxBridgeLog("capture begin: active-window read failed: " err.Message)
+        }
+
         A_Clipboard := ""                         ; 清空后再触发复制，便于判断是否拿到新内容
         Sleep(40)                                 ; 给系统一点时间完成剪贴板更新
         Send("^c")                                ; 向当前窗口发送复制（资源管理器中会复制选中项）
+        SandboxBridgeLog("capture clipboard: sent Ctrl+C")
 
         if !ClipWait(0.8) {
+            SandboxBridgeLog("capture via clipboard failed: ClipWait timeout")
             return selected                       ; 超时时返回空数组，由上层提示
         }
 
+        clipboardText := A_Clipboard
+        SandboxBridgeLog("capture clipboard: text_length=" StrLen(clipboardText)
+            " preview=" SandboxBridgeSanitizeForLog(SubStr(clipboardText, 1, 260)))
+
         ; A_Clipboard 在文件复制场景下会是多行路径文本，逐行解析即可。
-        for _, rawLine in StrSplit(A_Clipboard, "`n", "`r") {
+        for lineIndex, rawLine in StrSplit(clipboardText, "`n", "`r") {
             path := Trim(rawLine, " `t`r`n")
             if (path = "" || dedup.Has(path)) {
                 continue
             }
-            if FileExist(path) {                  ; 仅接收真实存在的文件系统路径
+            existsFlag := FileExist(path)
+            SandboxBridgeLog("capture candidate line=" lineIndex
+                " exists=" (existsFlag ? existsFlag : "no")
+                " path=" SandboxBridgeSanitizeForLog(path))
+            if existsFlag {                       ; 仅接收真实存在的文件系统路径
                 selected.Push(path)
                 dedup[path] := true
             }
         }
+        SandboxBridgeLog("capture result: selected_count=" selected.Length)
     } finally {
         A_Clipboard := clipBackup                 ; 还原原剪贴板，避免影响你的日常复制流程
+        SandboxBridgeLog("capture cleanup: clipboard restored")
     }
 
     return selected
+}
+
+; 把路径数组拼成适合日志阅读的一行文本。
+; 入参：路径数组。
+; 返回：用 | 分隔的简短文本。
+SandboxBridgeJoinForLog(items) {
+    text := ""
+    for index, item in items {
+        if (index > 1) {
+            text .= " | "
+        }
+        text .= item
+    }
+    return text
+}
+
+; 清理日志文本，保证每条日志只占一行。
+; 入参：任意文本。
+; 返回：把回车、换行、制表符压平成空格后的文本。
+SandboxBridgeSanitizeForLog(text) {
+    text := StrReplace(text, "`r", " ")
+    text := StrReplace(text, "`n", " ")
+    text := StrReplace(text, "`t", " ")
+    return Trim(text)
 }
 
 ; 重置状态对象：用于“任务初始化”和“清理完成后归零”
