@@ -39,8 +39,11 @@ def main(argv: list[str]) -> int:
         return 1
 
     try:
-        with config_path.open("rb") as config_file:
-            tomllib.load(config_file)
+        # Windows 用户很容易用记事本或某些编辑器保存出带 BOM 的 UTF-8 文件。
+        # json.load 上面已经用 utf-8-sig 兼容了 auth.json；这里也保持同样策略：
+        # 先用 utf-8-sig 去掉可能存在的 BOM，再把纯文本交给 tomllib.loads。
+        # 注意：这里仍然只做语法校验，不打印 TOML 内容，避免把密钥或 endpoint 泄露到日志。
+        tomllib.loads(config_path.read_text(encoding="utf-8-sig"))
     except Exception as exc:  # noqa: BLE001 - 同上，只输出错误类型与位置，不输出配置内容。
         print(f"config.toml 校验失败：{type(exc).__name__}: {exc}")
         return 1
@@ -51,4 +54,3 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))
-

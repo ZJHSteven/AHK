@@ -9,6 +9,7 @@
 ; 3) 出现失败时直接定位到具体用例。
 ; ============================================
 
+#Include ..\modules\utils.ahk
 #Include ..\modules\markdown_reference_link_inliner.ahk
 
 global g_TestPassCount := 0                                             ; 统计通过用例数，便于输出总览

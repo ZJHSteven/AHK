@@ -11,8 +11,8 @@ SetWorkingDir A_ScriptDir
 
 ; ---- 引入模块 ----
 #Include modules\utils.ahk
-#Include modules\hotkey_help.ahk
 #Include modules\codex_profile_switcher.ahk
+#Include modules\hotkey_help.ahk
 #Include modules\hotkeys.ahk
 #Include modules\window_switch.ahk
 ;#Include modules\llc_hold_speed.ahk

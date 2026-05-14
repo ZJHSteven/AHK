@@ -1,10 +1,10 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
-- 现状：已新增 AHK 托盘菜单能力：`查看热键` 使用显式注册表展示当前加载热键，`Codex 预设` 支持从托盘或 `Ctrl+Alt+F12` 弹出菜单切换多套 Codex 配置；已修复启动时 Codex 子菜单构造和 Alt 切窗活动窗口读取的异常弹窗。
+- 现状：已新增 AHK 托盘菜单能力：`查看热键` 使用显式注册表展示当前加载热键，`Codex 预设` 支持从托盘或 `Ctrl+Alt+F12` 弹出菜单切换多套 Codex 配置；已修复启动时 Codex 子菜单构造、Alt 切窗活动窗口读取，以及测试/启动阶段 `#Warn` 未赋值函数名警告。
 - 已完成：新增 Codex 预设清单 `config/codex_profiles/profiles.ini`，第一版包含 `海豹云-天才程序员`、`OpenAI Official`、`Right Code` 三套；真实 `auth.json/config.toml` 放入已忽略的 `secrets` 目录，不进入 Git。
 - 已完成：切换流程会按需校验 JSON/TOML、切换前备份 live 配置、写入后做字节级比对，成功/失败只用鼠标附近 ToolTip 提示。
-- 已验证：`tests/hotkey_help_tests.ahk`、`tests/codex_profile_switcher_tests.ahk`、`tests/markdown_reference_link_inliner_tests.ahk` 全部通过；其中热键帮助测试已覆盖托盘菜单初始化路径，`main.ahk /Validate` 也已通过。
+- 已验证：`tests/hotkey_help_tests.ahk`、`tests/codex_profile_switcher_tests.ahk`、`tests/markdown_reference_link_inliner_tests.ahk` 全部通过；其中热键帮助测试已覆盖托盘菜单初始化路径，`main.ahk /Validate` 也已通过，且相关测试入口已显式 include `utils.ahk` 消除 `Toast` 静态警告；Python TOML 校验已兼容 Windows 常见 UTF-8 BOM。
 - 下一步：Reload AHK 后从托盘打开“查看热键”和 `Ctrl+Alt+F12` 菜单，确认第一套预设显示为当前；手动补齐另外两套 secrets 后再做真实切换回归。
 
 ## 关键决策与理由（防止“吃书”）

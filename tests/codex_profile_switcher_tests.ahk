@@ -5,6 +5,7 @@
 ; 这个测试只使用 A_Temp 下的临时目录，不读写真实 %USERPROFILE%\.codex。
 ; ============================================
 
+#Include ..\modules\utils.ahk
 #Include ..\modules\codex_profile_switcher.ahk
 
 global g_TestPassCount := 0
@@ -150,7 +151,7 @@ CodexProfileTestValidationCache(root) {
     g_CodexProfilesValidationRunCount := 0
 
     first := CodexProfileValidateIfNeeded(profiles[1], root)
-    CodexProfileAssertTrue(first["ok"], "首次校验应通过")
+    CodexProfileAssertTrue(first["ok"], "首次校验应通过：" first["message"])
     CodexProfileAssertEqual(g_CodexProfilesValidationRunCount, 1, "首次校验应启动 Python")
 
     second := CodexProfileValidateIfNeeded(profiles[1], root)
