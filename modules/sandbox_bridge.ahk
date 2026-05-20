@@ -358,8 +358,9 @@ SandboxBridgeCleanupStagedFiles(showToast := true) {
 ; - 这样你复现一次后，我们可以从日志判断是焦点问题、剪贴板问题、路径解析问题，还是 FileExist 判定问题。
 SandboxBridgeCaptureSelectedPaths() {
     selected := []                                ; 返回值：路径数组
-    dedup := Map()                                ; 去重，防止重复路径
-    clipBackup := ClipboardAll()                  ; 完整备份当前剪贴板（含二进制格式）
+    activeHwnd := 0
+    activeExe := ""
+    activeTitle := ""
 
     try {
         try {
@@ -371,6 +372,101 @@ SandboxBridgeCaptureSelectedPaths() {
             SandboxBridgeLog("capture begin: active-window read failed: " err.Message)
         }
 
+        ; 资源管理器窗口优先走 Shell COM：
+        ; - 这是本次修复的核心。用户现场日志已经证明：Explorer 前台时，旧链路卡在 ClipWait 超时。
+        ; - 直接读取当前 Explorer 窗口的 SelectedItems()，可以绕开“复制动作没把内容放进剪贴板”这层不稳定因素。
+        if (activeExe = "explorer.exe") {
+            selected := SandboxBridgeCaptureExplorerSelection(activeHwnd)
+            if (selected.Length > 0) {
+                SandboxBridgeLog("capture result: explorer selection count=" selected.Length)
+                return selected
+            }
+            SandboxBridgeLog("capture explorer: returned 0 items; falling back to clipboard path")
+        }
+    }
+
+    ; 非 Explorer 窗口，或 Explorer COM 路径没拿到结果时，保留原剪贴板兜底方案。
+    return SandboxBridgeCaptureSelectedPathsViaClipboard()
+}
+
+; 通过 Shell COM 直接读取当前前台 Explorer 窗口的选中项。
+; 入参：
+; - activeHwnd：当前前台窗口句柄。
+; 返回：已去重、且真实存在的路径数组。
+; 说明：
+; - Microsoft Learn 文档说明 `Shell.Windows` 会返回 Shell 打开的窗口集合，
+;   `SelectedItems()` 可返回当前 Shell 文件夹视图中的选中项集合，`FolderItem.Path` 给出完整路径。
+; - 因此这条链路比“模拟 Ctrl+C 再等剪贴板”更贴近 Explorer 自身状态。
+SandboxBridgeCaptureExplorerSelection(activeHwnd) {
+    try shellWindows := ComObject("Shell.Application").Windows
+    catch as err {
+        SandboxBridgeLog("capture explorer: Shell.Application.Windows failed: " err.Message)
+        return []
+    }
+
+    return SandboxBridgeResolveShellWindowSelection(shellWindows, activeHwnd)
+}
+
+; 从一个 Shell 窗口集合里，找到与前台 hwnd 匹配的窗口，并提取选中项。
+; 入参：
+; - shellWindows：Shell.Windows 返回的窗口集合；测试里也可传入伪造数组。
+; - activeHwnd：当前前台窗口句柄。
+; 返回：已去重、且真实存在的路径数组。
+; 说明：
+; - 这个函数被单独抽出，是为了让测试可以不用真的驱动 Explorer，就能验证：
+;   1) hwnd 匹配是否正确；
+;   2) 路径去重/过滤是否正确；
+;   3) 缺失窗口/空选择时是否稳定返回空数组。
+SandboxBridgeResolveShellWindowSelection(shellWindows, activeHwnd) {
+    selected := []
+    dedup := Map()
+    matchedWindow := false
+
+    for _, shellWindow in shellWindows {
+        try {
+            if !SandboxBridgeShellWindowHwndMatches(shellWindow.HWND, activeHwnd) {
+                continue
+            }
+            matchedWindow := true
+
+            selectedItems := shellWindow.Document.SelectedItems()
+            try selectedCount := selectedItems.Count
+            catch {
+                selectedCount := "unknown"
+            }
+            SandboxBridgeLog("capture explorer: matched hwnd=" activeHwnd " selected_count=" selectedCount)
+
+            for itemIndex, shellItem in selectedItems {
+                try itemPath := shellItem.Path
+                catch as err {
+                    SandboxBridgeLog("capture explorer item failed: index=" itemIndex " err=" err.Message)
+                    continue
+                }
+                SandboxBridgeCollectExistingPath(selected, dedup, itemPath, "explorer item " itemIndex)
+            }
+            break
+        } catch as err {
+            SandboxBridgeLog("capture explorer enumeration failed: " err.Message)
+        }
+    }
+
+    if !matchedWindow {
+        SandboxBridgeLog("capture explorer: no shell window matched hwnd=" activeHwnd)
+    }
+    return selected
+}
+
+; 旧版剪贴板抓取逻辑保留为 fallback。
+; 适用场景：
+; 1) 当前不是 Explorer 窗口。
+; 2) Explorer COM 读取不到结果（例如桌面、特殊窗口或系统瞬时状态）。
+; 3) 后续若要兼容其他第三方文件管理器，这条链路仍可继续兜底。
+SandboxBridgeCaptureSelectedPathsViaClipboard() {
+    selected := []                                ; 返回值：路径数组
+    dedup := Map()                                ; 去重，防止重复路径
+    clipBackup := ClipboardAll()                  ; 完整备份当前剪贴板（含二进制格式）
+
+    try {
         A_Clipboard := ""                         ; 清空后再触发复制，便于判断是否拿到新内容
         Sleep(40)                                 ; 给系统一点时间完成剪贴板更新
         Send("^c")                                ; 向当前窗口发送复制（资源管理器中会复制选中项）
@@ -388,25 +484,59 @@ SandboxBridgeCaptureSelectedPaths() {
         ; A_Clipboard 在文件复制场景下会是多行路径文本，逐行解析即可。
         for lineIndex, rawLine in StrSplit(clipboardText, "`n", "`r") {
             path := Trim(rawLine, " `t`r`n")
-            if (path = "" || dedup.Has(path)) {
-                continue
-            }
-            existsFlag := FileExist(path)
-            SandboxBridgeLog("capture candidate line=" lineIndex
-                " exists=" (existsFlag ? existsFlag : "no")
-                " path=" SandboxBridgeSanitizeForLog(path))
-            if existsFlag {                       ; 仅接收真实存在的文件系统路径
-                selected.Push(path)
-                dedup[path] := true
-            }
+            SandboxBridgeCollectExistingPath(selected, dedup, path, "clipboard line " lineIndex)
         }
-        SandboxBridgeLog("capture result: selected_count=" selected.Length)
+        SandboxBridgeLog("capture clipboard result: selected_count=" selected.Length)
     } finally {
         A_Clipboard := clipBackup                 ; 还原原剪贴板，避免影响你的日常复制流程
         SandboxBridgeLog("capture cleanup: clipboard restored")
     }
 
     return selected
+}
+
+; 统一采纳一个候选路径。
+; 入参：
+; - selected：结果数组（会被原地追加）。
+; - dedup：去重 Map（会被原地写入）。
+; - path：候选路径。
+; - sourceLabel：日志来源标签，便于区分 Explorer / clipboard。
+; 返回：无。
+; 说明：
+; - 只接收“非空 + 未重复 + FileExist() 为真”的路径。
+; - 目录与文件都允许通过，因为这个模块本来就支持文件夹中转。
+SandboxBridgeCollectExistingPath(selected, dedup, path, sourceLabel := "") {
+    path := Trim(path, " `t`r`n")
+    if (path = "") {
+        SandboxBridgeLog("capture candidate skipped: source=" sourceLabel " reason=blank")
+        return
+    }
+    if dedup.Has(path) {
+        SandboxBridgeLog("capture candidate skipped: source=" sourceLabel
+            " reason=duplicate path=" SandboxBridgeSanitizeForLog(path))
+        return
+    }
+
+    existsFlag := FileExist(path)
+    SandboxBridgeLog("capture candidate: source=" sourceLabel
+        " exists=" (existsFlag ? existsFlag : "no")
+        " path=" SandboxBridgeSanitizeForLog(path))
+
+    if existsFlag {
+        selected.Push(path)
+        dedup[path] := true
+    }
+}
+
+; 判断一个 Shell 窗口句柄是否就是当前前台句柄。
+; 入参：
+; - shellWindowHwnd：Shell 窗口对象暴露出来的 HWND。
+; - activeHwnd：AHK 读到的前台 HWND。
+; 返回：true=匹配，false=不匹配。
+; 说明：
+; - COM 取出的 HWND 可能是变体数值；这里统一做数值化比较，避免字符串格式差异误判。
+SandboxBridgeShellWindowHwndMatches(shellWindowHwnd, activeHwnd) {
+    return ((shellWindowHwnd + 0) = (activeHwnd + 0))
 }
 
 ; 把路径数组拼成适合日志阅读的一行文本。
