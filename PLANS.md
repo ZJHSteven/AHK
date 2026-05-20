@@ -1,5 +1,18 @@
 # ExecPlan
 
+## 2026-05-21 沙盒中转在资源管理器中偶发拿不到真实路径
+
+### 背景
+- 目标：修复 `Ctrl+Alt+C` 在 Windows 资源管理器里已经选中文件时，仍反复提示“未拿到真实文件路径”的问题。
+- 现象：`logs\sandbox_bridge.log` 已明确记录多次 `capture begin: exe=explorer.exe`、`capture clipboard: sent Ctrl+C`，但随后都在 `ClipWait(0.8)` 超时，说明问题发生在“让 Explorer 把选中项写进剪贴板”之前，而不是后续 `FileExist()` 过滤。
+- 预期结果：资源管理器窗口里优先直接读取当前选中项真实路径，避免依赖 `Send("^c") + ClipWait + A_Clipboard`；同时保留原诊断日志与兜底逻辑，确保桌面或其他场景仍可回退。
+
+### 实现步骤
+1. 为 `modules/sandbox_bridge.ahk` 增加“Explorer 原生选中项读取”主路径，通过 Shell COM 找到当前前台 Explorer 窗口并遍历其 `SelectedItems()`。
+2. 将现有剪贴板抓取链路收敛为 fallback，只在原生读取失败或当前不是可识别的 Explorer 窗口时启用，并补充更明确的日志。
+3. 新增自动化测试，覆盖路径去重、路径采纳规则、Explorer 窗口匹配等可离线验证逻辑；再跑脚本级语法校验与现有测试集。
+4. 更新 `PROGRESS.md`，记录这次根因、改法、测试结果与后续手动复现要点。
+
 ## 2026-05-13 AHK 托盘热键帮助与 Codex 预设切换
 
 ### 背景
