@@ -30,6 +30,7 @@ SandboxBridgeRunAllTests() {
     SandboxBridgeTestShellWindowHwndMatches()
     SandboxBridgeTestCollectExistingPathDedupsAndFilters()
     SandboxBridgeTestResolveShellWindowSelectionFindsMatchingExplorer()
+    SandboxBridgeTestResolveShellWindowSelectionFromCountItemCollection()
     SandboxBridgeTestResolveShellWindowSelectionReturnsEmptyWhenNoMatch()
 }
 
@@ -112,6 +113,30 @@ SandboxBridgeTestResolveShellWindowSelectionFindsMatchingExplorer() {
     }
 }
 
+SandboxBridgeTestResolveShellWindowSelectionFromCountItemCollection() {
+    root := A_Temp "\ahk_sandbox_bridge_shell_collection_" A_TickCount
+    filePath := root "\picked.txt"
+
+    try {
+        DirCreate(root)
+        FileAppend("demo", filePath, "UTF-8")
+
+        windowsArray := [
+            SandboxBridgeFakeShellWindow(1111, []),
+            SandboxBridgeFakeShellWindow(2222, [SandboxBridgeFakeFolderItem(filePath)])
+        ]
+        shellWindows := SandboxBridgeFakeShellWindowsCollection(windowsArray)
+
+        selected := SandboxBridgeResolveShellWindowSelection(shellWindows, 2222)
+        SandboxBridgeAssertEqual(selected.Length, 1, "COM 集合式访问应能正确解析匹配窗口")
+        SandboxBridgeAssertEqual(selected[1], filePath, "COM 集合式访问应取到目标文件路径")
+    } finally {
+        if DirExist(root) {
+            try DirDelete(root, true)
+        }
+    }
+}
+
 SandboxBridgeTestResolveShellWindowSelectionReturnsEmptyWhenNoMatch() {
     shellWindows := [
         SandboxBridgeFakeShellWindow(3003, [SandboxBridgeFakeFolderItem("C:\definitely-missing-path.txt")])
@@ -139,4 +164,14 @@ SandboxBridgeFakeFolderItem(path) {
     return {
         Path: path
     }
+}
+
+SandboxBridgeFakeShellWindowsCollection(windowsArray) {
+    collection := {
+        Count: windowsArray.Length
+    }
+    collection.DefineProp("Item", {
+        Call: (self, index) => windowsArray[index + 1]
+    })
+    return collection
 }

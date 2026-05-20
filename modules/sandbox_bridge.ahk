@@ -361,13 +361,28 @@ SandboxBridgeCaptureSelectedPaths() {
     activeHwnd := 0
     activeExe := ""
     activeTitle := ""
+    matchHwnd := 0
+    matchExe := ""
+    matchTitle := ""
 
     try {
         try {
             activeHwnd := WinGetID("A")
             activeExe := StrLower(WinGetProcessName("ahk_id " activeHwnd))
             activeTitle := WinGetTitle("ahk_id " activeHwnd)
-            SandboxBridgeLog("capture begin: hwnd=" activeHwnd " exe=" activeExe " title=" activeTitle)
+            matchHwnd := SandboxBridgeGetRootAncestorHwnd(activeHwnd)
+            if (matchHwnd = 0) {
+                matchHwnd := activeHwnd
+            }
+            try matchExe := StrLower(WinGetProcessName("ahk_id " matchHwnd))
+            try matchTitle := WinGetTitle("ahk_id " matchHwnd)
+
+            SandboxBridgeLog("capture begin: hwnd=" activeHwnd
+                " exe=" activeExe
+                " title=" activeTitle
+                " match_hwnd=" matchHwnd
+                " match_exe=" matchExe
+                " match_title=" matchTitle)
         } catch as err {
             SandboxBridgeLog("capture begin: active-window read failed: " err.Message)
         }
@@ -375,8 +390,11 @@ SandboxBridgeCaptureSelectedPaths() {
         ; 资源管理器窗口优先走 Shell COM：
         ; - 这是本次修复的核心。用户现场日志已经证明：Explorer 前台时，旧链路卡在 ClipWait 超时。
         ; - 直接读取当前 Explorer 窗口的 SelectedItems()，可以绕开“复制动作没把内容放进剪贴板”这层不稳定因素。
-        if (activeExe = "explorer.exe") {
-            selected := SandboxBridgeCaptureExplorerSelection(activeHwnd)
+        ; 这里同时接受：
+        ; 1) 当前前台窗口本身就是 Explorer 主窗口；
+        ; 2) 当前前台焦点落在预览窗格/子控件里，但其根祖先窗口仍然是 Explorer。
+        if (activeExe = "explorer.exe" || matchExe = "explorer.exe") {
+            selected := SandboxBridgeCaptureExplorerSelection(matchHwnd)
             if (selected.Length > 0) {
                 SandboxBridgeLog("capture result: explorer selection count=" selected.Length)
                 return selected
@@ -422,31 +440,32 @@ SandboxBridgeResolveShellWindowSelection(shellWindows, activeHwnd) {
     dedup := Map()
     matchedWindow := false
 
-    for _, shellWindow in shellWindows {
-        try {
-            if !SandboxBridgeShellWindowHwndMatches(shellWindow.HWND, activeHwnd) {
+    ; 真实 ShellWindows 是 COM 集合，必须通过 Count + Item(i) 取窗口对象。
+    ; 若直接 `for _, shellWindow in shellWindows`，某些环境下迭代到的是索引整数而不是窗口对象，
+    ; 这正是日志里 `Integer has no property named HWND` 的来源。
+    try windowCount := shellWindows.Count
+    catch {
+        windowCount := ""
+    }
+
+    if (windowCount != "") {
+        Loop windowCount {
+            try shellWindow := shellWindows.Item(A_Index - 1)
+            catch as err {
+                SandboxBridgeLog("capture explorer enumeration failed: item_index=" (A_Index - 1) " err=" err.Message)
                 continue
             }
-            matchedWindow := true
-
-            selectedItems := shellWindow.Document.SelectedItems()
-            try selectedCount := selectedItems.Count
-            catch {
-                selectedCount := "unknown"
+            if SandboxBridgeTryCollectShellWindowSelection(shellWindow, activeHwnd, selected, dedup) {
+                matchedWindow := true
+                break
             }
-            SandboxBridgeLog("capture explorer: matched hwnd=" activeHwnd " selected_count=" selectedCount)
-
-            for itemIndex, shellItem in selectedItems {
-                try itemPath := shellItem.Path
-                catch as err {
-                    SandboxBridgeLog("capture explorer item failed: index=" itemIndex " err=" err.Message)
-                    continue
-                }
-                SandboxBridgeCollectExistingPath(selected, dedup, itemPath, "explorer item " itemIndex)
+        }
+    } else {
+        for _, shellWindow in shellWindows {
+            if SandboxBridgeTryCollectShellWindowSelection(shellWindow, activeHwnd, selected, dedup) {
+                matchedWindow := true
+                break
             }
-            break
-        } catch as err {
-            SandboxBridgeLog("capture explorer enumeration failed: " err.Message)
         }
     }
 
@@ -454,6 +473,46 @@ SandboxBridgeResolveShellWindowSelection(shellWindows, activeHwnd) {
         SandboxBridgeLog("capture explorer: no shell window matched hwnd=" activeHwnd)
     }
     return selected
+}
+
+; 尝试从单个 Shell 窗口对象中提取选中项。
+; 入参：
+; - shellWindow：单个 Shell 窗口对象，应提供 HWND 与 Document.SelectedItems()。
+; - activeHwnd：用于匹配的目标 Explorer 主窗口句柄。
+; - selected / dedup：结果容器，按引用修改。
+; 返回：true=这个 shellWindow 就是目标窗口；false=不是目标窗口或读取失败。
+SandboxBridgeTryCollectShellWindowSelection(shellWindow, activeHwnd, selected, dedup) {
+    try shellWindowHwnd := shellWindow.HWND
+    catch as err {
+        SandboxBridgeLog("capture explorer enumeration failed: window has no HWND: " err.Message)
+        return false
+    }
+
+    if !SandboxBridgeShellWindowHwndMatches(shellWindowHwnd, activeHwnd) {
+        return false
+    }
+
+    try selectedItems := shellWindow.Document.SelectedItems()
+    catch as err {
+        SandboxBridgeLog("capture explorer selected-items failed: hwnd=" activeHwnd " err=" err.Message)
+        return true
+    }
+
+    try selectedCount := selectedItems.Count
+    catch {
+        selectedCount := "unknown"
+    }
+    SandboxBridgeLog("capture explorer: matched hwnd=" activeHwnd " selected_count=" selectedCount)
+
+    for itemIndex, shellItem in selectedItems {
+        try itemPath := shellItem.Path
+        catch as err {
+            SandboxBridgeLog("capture explorer item failed: index=" itemIndex " err=" err.Message)
+            continue
+        }
+        SandboxBridgeCollectExistingPath(selected, dedup, itemPath, "explorer item " itemIndex)
+    }
+    return true
 }
 
 ; 旧版剪贴板抓取逻辑保留为 fallback。
@@ -537,6 +596,25 @@ SandboxBridgeCollectExistingPath(selected, dedup, path, sourceLabel := "") {
 ; - COM 取出的 HWND 可能是变体数值；这里统一做数值化比较，避免字符串格式差异误判。
 SandboxBridgeShellWindowHwndMatches(shellWindowHwnd, activeHwnd) {
     return ((shellWindowHwnd + 0) = (activeHwnd + 0))
+}
+
+; 取某个窗口的“根祖先”句柄。
+; 入参：
+; - hwnd：任意当前前台窗口/子窗口句柄。
+; 返回：根祖先窗口句柄；失败时返回原 hwnd 或 0。
+; 说明：
+; - 预览窗格、列表控件、第三方预览处理器都可能让前台焦点落在 Explorer 的子窗口上。
+; - `GetAncestor(..., GA_ROOT=2)` 可以把这些子窗口统一归并回最外层顶级窗口，更适合拿来匹配 ShellWindows 里的 Explorer 主窗口。
+SandboxBridgeGetRootAncestorHwnd(hwnd) {
+    if !hwnd {
+        return 0
+    }
+    try {
+        rootHwnd := DllCall("GetAncestor", "Ptr", hwnd, "UInt", 2, "Ptr")
+        return rootHwnd ? rootHwnd : hwnd
+    } catch {
+        return hwnd
+    }
 }
 
 ; 把路径数组拼成适合日志阅读的一行文本。
