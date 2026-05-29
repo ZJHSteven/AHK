@@ -27,8 +27,10 @@ CodexProfileRunAllTests() {
         CodexProfileTestManifestParse(root)
         CodexProfileTestConfiguredDetection(root)
         CodexProfileTestActiveDetection(root, liveDir)
+        CodexProfileTestActiveDetectionAcceptsAuthRefresh(root, liveDir)
         CodexProfileTestTrayMenuCanBeBuilt(root, liveDir)
         CodexProfileTestValidationCache(root)
+        CodexProfileTestSwitchSyncsLiveAuthBackToSource(root, liveDir)
         CodexProfileTestSwitchWritesBackupAndLive(root, liveDir)
         CodexProfileTestInvalidProfileDoesNotChangeLive(root, liveDir)
     } finally {
@@ -137,6 +139,16 @@ CodexProfileTestActiveDetection(root, liveDir) {
     CodexProfileWriteText(liveDir "\config.toml", "model_provider = `"custom`"`nmodel = `"gpt-test`"`n")
 }
 
+CodexProfileTestActiveDetectionAcceptsAuthRefresh(root, liveDir) {
+    refreshedAuth := "{`"OPENAI_API_KEY`":`"haibao-key`",`"auth_mode`":`"login`",`"last_refresh`":`"2026-05-29T09:00:00Z`",`"tokens`":{`"refresh_token`":`"new-refresh-token`"}}"
+    CodexProfileWriteText(liveDir "\auth.json", refreshedAuth)
+
+    activeId := CodexProfilesDetectActiveId(root, liveDir)
+    CodexProfileAssertEqual(activeId, "haibao", "仅 auth 因 refresh 漂移时，仍应识别为当前海豹云预设")
+
+    CodexProfileWriteText(liveDir "\auth.json", "{`"OPENAI_API_KEY`":`"haibao-key`"}")
+}
+
 CodexProfileTestTrayMenuCanBeBuilt(root, liveDir) {
     ; 这个用例专门覆盖真实托盘初始化会走到的菜单构造路径。
     ; 之前的问题是局部变量 menu 遮蔽了 AHK 内置 Menu 类，
@@ -157,6 +169,15 @@ CodexProfileTestValidationCache(root) {
     second := CodexProfileValidateIfNeeded(profiles[1], root)
     CodexProfileAssertTrue(second["ok"], "缓存校验应通过")
     CodexProfileAssertEqual(g_CodexProfilesValidationRunCount, 1, "文件未变化时不应再次启动 Python")
+}
+
+CodexProfileTestSwitchSyncsLiveAuthBackToSource(root, liveDir) {
+    refreshedAuth := "{`"OPENAI_API_KEY`":`"haibao-key`",`"auth_mode`":`"login`",`"last_refresh`":`"2026-05-29T09:00:00Z`",`"tokens`":{`"refresh_token`":`"new-refresh-token`"}}"
+    CodexProfileWriteText(liveDir "\auth.json", refreshedAuth)
+
+    result := CodexProfilesSwitch("openai_official", root, liveDir)
+    CodexProfileAssertTrue(result["ok"], "切换前应先把来源预设 auth 回写成功")
+    CodexProfileAssertEqual(FileRead(root "\secrets\haibao\auth.json", "UTF-8"), refreshedAuth, "来源预设 auth 应被同步成最新 live token")
 }
 
 CodexProfileTestSwitchWritesBackupAndLive(root, liveDir) {

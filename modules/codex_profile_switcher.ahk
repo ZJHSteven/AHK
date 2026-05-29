@@ -322,25 +322,55 @@ CodexProfilesQuoteArg(value) {
 ; 入参：root/liveDir 可选，测试时传临时目录。
 ; 出参：匹配到的 profile id；无匹配返回空字符串。
 CodexProfilesDetectActiveId(root := "", liveDir := "") {
+    match := CodexProfilesDetectActiveMatch(root, liveDir)
+    if IsObject(match) {
+        return match["id"]
+    }
+    return ""
+}
+
+; 检测 live 当前最像哪套预设。
+; 入参：root/liveDir 可选，测试时传临时目录。
+; 出参：
+; - 命中时返回 Map("id", id, "profile", profileMap, "matchMode", "exact|config_only")。
+; - 未命中时返回 0。
+; 说明：
+; 1) exact：auth.json 与 config.toml 都完全一致。
+; 2) config_only：只允许“config 一致，但 auth 因 refresh token 自动刷新而漂移”的场景。
+;    这样离开 OpenAI Official 前，脚本仍能认出当前 live 来自哪套预设，
+;    进而先把最新 auth.json 回写到 secrets，避免下次切回旧 token。
+CodexProfilesDetectActiveMatch(root := "", liveDir := "") {
     root := CodexProfilesRoot(root)
     liveDir := CodexProfilesLiveDir(liveDir)
     liveAuth := liveDir "\auth.json"
     liveConfig := liveDir "\config.toml"
+    configOnlyMatches := []
 
     if !(FileExist(liveAuth) && FileExist(liveConfig)) {
-        return ""
+        return 0
     }
 
     for _, profile in CodexProfilesLoadManifest(root) {
         if !CodexProfileIsConfigured(profile) {
             continue
         }
-        if (CodexProfilesFilesEqual(liveAuth, profile["authPath"])
-            && CodexProfilesFilesEqual(liveConfig, profile["configPath"])) {
-            return profile["id"]
+
+        authEqual := CodexProfilesFilesEqual(liveAuth, profile["authPath"])
+        configEqual := CodexProfilesFilesEqual(liveConfig, profile["configPath"])
+
+        if (authEqual && configEqual) {
+            return Map("id", profile["id"], "profile", profile, "matchMode", "exact")
+        }
+        if configEqual {
+            configOnlyMatches.Push(profile)
         }
     }
-    return ""
+
+    if (configOnlyMatches.Length = 1) {
+        profile := configOnlyMatches[1]
+        return Map("id", profile["id"], "profile", profile, "matchMode", "config_only")
+    }
+    return 0
 }
 
 ; 字节级比较两个文件是否完全一致。
@@ -365,6 +395,48 @@ CodexProfilesFilesEqual(pathA, pathB) {
     return true
 }
 
+; 在真正切换前，把当前 live auth.json 回写到“正在离开的那套预设”。
+; 入参：
+; - profile：来源预设；必须来自 CodexProfilesDetectActiveMatch() 的结果。
+; - liveDir：当前 live 目录。
+; 出参：Map("ok", bool, "message", 文本)。
+; 设计取舍：
+; 1) 这里只自动同步 auth.json，不自动同步 config.toml。
+;    auth 属于会被平台后台刷新的运行态凭据，应该始终以 live 为准；
+;    config.toml 则更像人工维护的预设定义，自动回写反而可能把错误 MCP 配置固化回去。
+; 2) 回写前复用现有 Python helper 校验 live JSON/TOML，避免把损坏的 live 文件写回预设目录。
+CodexProfilesSyncLiveAuthToProfile(profile, liveDir) {
+    if !IsObject(profile) {
+        return Map("ok", true, "message", "当前 live 未匹配任何预设，无需回写")
+    }
+
+    liveAuth := liveDir "\auth.json"
+    liveConfig := liveDir "\config.toml"
+    if !(FileExist(liveAuth) && FileExist(liveConfig)) {
+        return Map("ok", false, "message", "当前 live auth.json / config.toml 不完整，无法回写来源预设")
+    }
+
+    validation := CodexProfileRunPythonValidation(liveAuth, liveConfig)
+    if !validation["ok"] {
+        return Map("ok", false, "message", "当前 live 配置校验失败，拒绝回写：" validation["message"])
+    }
+
+    SplitPath(profile["authPath"], , &authDir)
+    if !DirExist(authDir) {
+        DirCreate(authDir)
+    }
+
+    try {
+        FileCopy(liveAuth, profile["authPath"], true)
+        if !CodexProfilesFilesEqual(liveAuth, profile["authPath"]) {
+            throw Error("auth.json 回写后比对失败")
+        }
+        return Map("ok", true, "message", "已同步来源预设 auth：" profile["displayName"])
+    } catch as err {
+        return Map("ok", false, "message", "回写来源预设 auth 失败：" err.Message)
+    }
+}
+
 ; 切换到指定 Codex 预设。
 ; 入参：
 ; - profileId：profiles.ini 分节名。
@@ -386,6 +458,14 @@ CodexProfilesSwitch(profileId, root := "", liveDir := "") {
     validation := CodexProfileValidateIfNeeded(profile, root)
     if !validation["ok"] {
         return Map("ok", false, "message", profile["displayName"] " 校验失败：" validation["message"], "backupDir", "")
+    }
+
+    currentMatch := CodexProfilesDetectActiveMatch(root, liveDir)
+    if IsObject(currentMatch) {
+        syncResult := CodexProfilesSyncLiveAuthToProfile(currentMatch["profile"], liveDir)
+        if !syncResult["ok"] {
+            return Map("ok", false, "message", syncResult["message"], "backupDir", "")
+        }
     }
 
     backupDir := CodexProfilesBackupLive(root, liveDir)
