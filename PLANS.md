@@ -1,5 +1,25 @@
 # ExecPlan
 
+## 2026-05-29 Codex 三套预设统一 MCP 真源并收敛重复插件
+
+### 背景
+- 目标：按用户刚确认的策略，统一 `OpenAI Official`、`海豹云-天才程序员`、`Right Code` 三套预设的 MCP / plugin 开关，避免“同一套 skills 已经迁到全局，plugin 里又开一份”造成重复。
+- 已知要求：
+  - 三套预设都至少显式具备并启用 `context7`、`github`、`cloudflare-api` 三个 MCP。
+  - 其余现有 MCP 默认保持关闭，避免无意消耗或重复入口。
+  - `Right Code` 的整体结构尽量向海豹云对齐，只保留 provider 差异。
+  - `OpenAI Official` 里用户点名的 `canva / figma / github / stripe / vercel / cloudflare` plugin 应关闭。
+- 预期结果：三套预设都能通过 `validate_codex_profile.py` 校验；`OpenAI Official` 不再因为旧瘦配置缺 MCP，也不再因为多开重复 plugin 导致状态混乱。
+
+### 实现步骤
+1. 读取当前 plugin cache，确认 Cloudflare 走 `skills + .mcp.json`，GitHub 走 `skills + .app.json`，据此解释“为什么 plugin 与 MCP 会重复”。
+2. 直接修正三套本机 secrets 里的 `config.toml`：
+   - 三套都补齐并启用 `context7 / github / cloudflare-api`。
+   - 其余已有 MCP 显式保持 `enabled = false`。
+   - `Right Code` 向海豹云看齐，仅保留 provider 差异。
+3. 收敛 plugin 开关，优先关闭与已迁移全局 skills / 新 MCP 路径重复的项；其中 `OpenAI Official` 至少关闭用户点名的重复 plugin。
+4. 更新 `PROGRESS.md` 记录这轮“以 MCP 为真源、重复 plugin 收敛”的最新结论，并执行三套配置校验。
+
 ## 2026-05-29 Codex 预设切换补齐 auth 回写与 OpenAI Official MCP 修复
 
 ### 背景
