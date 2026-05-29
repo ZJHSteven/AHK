@@ -1,5 +1,20 @@
 # ExecPlan
 
+## 2026-05-29 Codex 预设切换补齐 auth 回写与 OpenAI Official MCP 修复
+
+### 背景
+- 目标：修复 Codex 预设切换里的两个真实使用问题。
+- 问题1：当前 `modules/codex_profile_switcher.ahk` 只会把目标预设覆盖到 live `~/.codex`，不会在“离开当前预设”时把最新 live `auth.json` 回写到来源预设；而 `OpenAI Official` 的 refresh token 会自动刷新，导致下次切回时又被旧 token 覆盖。
+- 问题2：`config/codex_profiles/secrets/openai_official/config.toml` 与海豹云/当前 live 的插件与 MCP 清单不一致，当前缺少 `context7 / github / figma / stitch` 等 MCP，因此切到 `OpenAI Official` 后会看到 MCP 变少。
+- 预期结果：切换时先识别当前 live 属于哪套预设，再把当前 live `auth.json`（必要时连同 `config.toml`）同步回来源预设；同时补齐 `OpenAI Official` 预设中缺失的 MCP/插件配置，并补测试防止回归。
+
+### 实现步骤
+1. 扩展 Codex 预设切换模块，在执行覆盖前先检测当前 active profile，并把当前 live 文件安全同步回对应预设目录。
+2. 约束同步策略：至少保证 `auth.json` 始终回写最新版本；若 live 当前正好属于该预设且 `config.toml` 也发生真实变更，则允许一并同步，避免预设长期漂移。
+3. 补自动化测试，覆盖“切换前回写来源预设 auth”、“切换失败不污染 live”、“回写后下一次切换仍能命中最新 token”。
+4. 修复本机 `OpenAI Official` 预设配置，补齐缺失的 MCP/插件条目，并再次核对与 live/海豹云的结构差异。
+5. 更新 `PROGRESS.md`，记录这次根因、配置差异结论与验证结果。
+
 ## 2026-05-21 沙盒中转在资源管理器中偶发拿不到真实路径
 
 ### 背景
