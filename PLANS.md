@@ -1,5 +1,28 @@
 # ExecPlan
 
+## 2026-06-07 Codex 三套预设新增通用模板同步开关
+
+### 背景
+- 目标：把 `OpenAI Official`、`海豹云-天才程序员`、`Right Code` 升级成“同一套公共模板 + 各自 provider 差异”的同步模式。
+- 新需求：用户确认这三套预设本质上只是“换 provider”，而不是维护三份彼此漂移的独立配置。开启开关后，只要在任意一套预设的 live 运行态里改了公共配置（插件、MCP、模型参数、projects、marketplaces 等），切出时都应自动同步到三套预设；三者只保留 provider 相关差异。
+- 当前问题：
+  - `OpenAI Official` 目前已大体追平海豹云，但 `Right Code` 仍明显落后。
+  - 现有“整文件回写来源预设”只能保证当前来源不丢改动，不能把公共改动自动扩散到另外两套预设。
+- 预期结果：
+  - 新增一个可配置的“通用模板同步”开关。
+  - 开启后，任一来源 live 的公共 `config.toml` 变更会同步施加到三套预设。
+  - 三套预设只保留各自 provider 差异；其余结构与开关矩阵自动追平。
+
+### 实现步骤
+1. 在 `config/codex_profiles` 下新增 `settings.ini`，提供 `shared_template.enabled` 与成员列表配置。
+2. 扩展 `profiles.ini`，为三套预设补 provider 模板元数据（top-level `model_provider` 是否存在、provider section 名称、base_url、wire_api、requires_openai_auth`）。
+3. 在 `modules/codex_profile_switcher.ahk` 中实现：
+   - 读取通用模板设置。
+   - 把 live `config.toml` 作为公共模板来源。
+   - 对模板组内每套预设套用自己的 provider patch，再写回各自 `config.toml`。
+   - `auth.json` 仍只回写当前来源预设，不跨 provider 扩散。
+4. 补测试覆盖“模板关闭时只回写来源”、“模板开启时三套公共配置追平且只保留 provider 差异”，并更新 `README/PROGRESS`。
+
 ## 2026-06-06 Codex 预设切换改为整文件回填并追平最近运行态
 
 ### 背景

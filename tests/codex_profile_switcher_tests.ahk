@@ -32,6 +32,7 @@ CodexProfileRunAllTests() {
         CodexProfileTestValidationCache(root)
         CodexProfileTestSwitchSyncsLiveFilesBackToSource(root, liveDir)
         CodexProfileTestSwitchFallsBackToLastSwitchForFullConfigSync(root, liveDir)
+        CodexProfileTestSharedTemplateSyncsAllProfiles(root, liveDir)
         CodexProfileTestSwitchWritesBackupAndLive(root, liveDir)
         CodexProfileTestInvalidProfileDoesNotChangeLive(root, liveDir)
     } finally {
@@ -86,18 +87,30 @@ CodexProfileCreateFixture(root, liveDir) {
 display_name=海豹云-天才程序员
 auth_path=secrets\haibao\auth.json
 config_path=secrets\haibao\config.toml
+template_model_provider=custom
+template_provider_section_name=custom
+template_provider_base_url=https://code.rpgame.net
+template_provider_wire_api=responses
+template_provider_requires_openai_auth=true
 
 [openai_official]
 display_name=OpenAI Official
 auth_path=secrets\openai_official\auth.json
 config_path=secrets\openai_official\config.toml
+template_model_provider=
 
 [right_code]
 display_name=Right Code
 auth_path=secrets\right_code\auth.json
 config_path=secrets\right_code\config.toml
+template_model_provider=right_code
+template_provider_section_name=right_code
+template_provider_base_url=https://www.right.codes/codex/v1
+template_provider_wire_api=responses
+template_provider_requires_openai_auth=true
     )"
     CodexProfileWriteText(root "\profiles.ini", manifest)
+    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=haibao,openai_official,right_code`n")
 
     CodexProfileWriteText(root "\secrets\haibao\auth.json", "{`"OPENAI_API_KEY`":`"haibao-key`"}")
     CodexProfileWriteText(root "\secrets\haibao\config.toml", "model_provider = `"custom`"`nmodel = `"gpt-test`"`n")
@@ -199,6 +212,112 @@ CodexProfileTestSwitchFallsBackToLastSwitchForFullConfigSync(root, liveDir) {
     CodexProfileAssertTrue(result["ok"], "即使 config 已漂移，仍应依赖 last_switch 回写来源整文件")
     CodexProfileAssertEqual(FileRead(root "\secrets\haibao\auth.json", "UTF-8"), refreshedAuth, "last_switch 兜底时也应回写来源 auth")
     CodexProfileAssertEqual(FileRead(root "\secrets\haibao\config.toml", "UTF-8"), driftedConfig, "last_switch 兜底时也应回写来源 config")
+}
+
+CodexProfileTestSharedTemplateSyncsAllProfiles(root, liveDir) {
+    sharedSourceConfig := "
+    (
+model_provider = "custom"
+personality = "pragmatic"
+model = "gpt-shared"
+model_reasoning_effort = "high"
+
+[model_providers]
+[model_providers.custom]
+name = "custom"
+base_url = "https://code.rpgame.net"
+wire_api = "responses"
+requires_openai_auth = true
+
+[marketplaces]
+[marketplaces.openai-bundled]
+last_updated = "2026-06-07T01:02:03Z"
+source_type = "local"
+source = '\\?\C:\Users\ZJHSteven\.codex\.tmp\bundled-marketplaces\openai-bundled'
+
+[plugins."browser@openai-bundled"]
+enabled = false
+    )"
+    officialBefore := "
+    (
+personality = "pragmatic"
+model = "gpt-old-official"
+
+[model_providers]
+[model_providers.custom]
+name = "custom"
+base_url = "https://code.rpgame.net"
+wire_api = "responses"
+requires_openai_auth = true
+
+[marketplaces]
+[marketplaces.openai-bundled]
+last_updated = "2026-01-01T00:00:00Z"
+source_type = "local"
+source = '\\?\C:\Users\ZJHSteven\.codex\.tmp\bundled-marketplaces\openai-bundled'
+
+[plugins."browser@openai-bundled"]
+enabled = true
+    )"
+    rightCodeBefore := "
+    (
+model_provider = "right_code"
+disable_response_storage = true
+personality = "pragmatic"
+model = "gpt-old-right-code"
+
+[model_providers]
+[model_providers.right_code]
+name = "right_code"
+base_url = "https://www.right.codes/codex/v1"
+wire_api = "responses"
+requires_openai_auth = true
+
+[marketplaces]
+[marketplaces.openai-bundled]
+last_updated = "2026-01-01T00:00:00Z"
+source_type = "local"
+source = '\\?\C:\Users\ZJHSteven\.codex\.tmp\bundled-marketplaces\openai-bundled'
+
+[plugins."browser@openai-bundled"]
+enabled = true
+    )"
+
+    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=1`nmember_ids=haibao,openai_official,right_code`n")
+    CodexProfileWriteText(root "\secrets\haibao\config.toml", sharedSourceConfig)
+    CodexProfileWriteText(root "\secrets\openai_official\config.toml", officialBefore)
+    CodexProfileWriteText(root "\secrets\right_code\auth.json", "{`"OPENAI_API_KEY`":`"right-code-key`"}")
+    CodexProfileWriteText(root "\secrets\right_code\config.toml", rightCodeBefore)
+    CodexProfileWriteText(liveDir "\auth.json", "{`"OPENAI_API_KEY`":`"haibao-key`",`"auth_mode`":`"login`"}")
+    CodexProfileWriteText(liveDir "\config.toml", sharedSourceConfig)
+
+    result := CodexProfilesSwitch("openai_official", root, liveDir)
+    CodexProfileAssertTrue(result["ok"], "开启通用模板后，切换应成功并同步三套预设")
+
+    officialAfter := FileRead(root "\secrets\openai_official\config.toml", "UTF-8")
+    haibaoAfter := FileRead(root "\secrets\haibao\config.toml", "UTF-8")
+    rightCodeAfter := FileRead(root "\secrets\right_code\config.toml", "UTF-8")
+
+    quotedSharedModel := "model = " Chr(34) "gpt-shared" Chr(34)
+    quotedSharedUpdatedAt := "last_updated = " Chr(34) "2026-06-07T01:02:03Z" Chr(34)
+    quotedCustomProvider := "model_provider = " Chr(34) "custom" Chr(34)
+    quotedRightCodeProvider := "model_provider = " Chr(34) "right_code" Chr(34)
+    quotedRightCodeBaseUrl := "base_url = " Chr(34) "https://www.right.codes/codex/v1" Chr(34)
+
+    CodexProfileAssertTrue(InStr(officialAfter, quotedSharedModel), "Official 应同步公共 model")
+    CodexProfileAssertTrue(InStr(officialAfter, quotedSharedUpdatedAt), "Official 应同步公共 marketplace 时间戳")
+    CodexProfileAssertFalse(InStr(officialAfter, quotedCustomProvider), "Official 不应保留 custom 顶层 provider")
+
+    CodexProfileAssertTrue(InStr(haibaoAfter, quotedCustomProvider), "海豹云应保留 custom 顶层 provider")
+    CodexProfileAssertTrue(InStr(haibaoAfter, "enabled = false"), "海豹云应同步公共 plugin 开关")
+
+    CodexProfileAssertTrue(InStr(rightCodeAfter, quotedRightCodeProvider), "RC 应改写成 right_code 顶层 provider")
+    CodexProfileAssertTrue(InStr(rightCodeAfter, "[model_providers.right_code]"), "RC 应改写成 right_code provider section")
+    CodexProfileAssertTrue(InStr(rightCodeAfter, quotedRightCodeBaseUrl), "RC 应保留自己的 provider base_url")
+    CodexProfileAssertFalse(InStr(rightCodeAfter, "disable_response_storage = true"), "RC 的旧私有差异应被公共模板抹平")
+
+    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=haibao,openai_official,right_code`n")
+    CodexProfileWriteText(root "\secrets\right_code\auth.json", "{bad json")
 }
 
 CodexProfileTestSwitchWritesBackupAndLive(root, liveDir) {

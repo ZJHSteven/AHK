@@ -163,12 +163,26 @@ CodexProfilesPushManifestEntry(profiles, root, currentId, currentData) {
     displayName := currentData.Has("display_name") ? currentData["display_name"] : currentId
     authRel := currentData.Has("auth_path") ? currentData["auth_path"] : "secrets\" currentId "\auth.json"
     configRel := currentData.Has("config_path") ? currentData["config_path"] : "secrets\" currentId "\config.toml"
+    hasTemplateModelProvider := currentData.Has("template_model_provider")
+    templateModelProvider := hasTemplateModelProvider ? currentData["template_model_provider"] : ""
+    templateProviderSectionName := currentData.Has("template_provider_section_name") ? currentData["template_provider_section_name"] : ""
+    templateProviderBaseUrl := currentData.Has("template_provider_base_url") ? currentData["template_provider_base_url"] : ""
+    templateProviderWireApi := currentData.Has("template_provider_wire_api") ? currentData["template_provider_wire_api"] : "responses"
+    templateProviderRequiresOpenAIAuth := currentData.Has("template_provider_requires_openai_auth")
+        ? currentData["template_provider_requires_openai_auth"]
+        : "true"
 
     profiles.Push(Map(
         "id", currentId,
         "displayName", displayName,
         "authPath", CodexProfilesResolvePath(root, authRel),
-        "configPath", CodexProfilesResolvePath(root, configRel)
+        "configPath", CodexProfilesResolvePath(root, configRel),
+        "hasTemplateModelProvider", hasTemplateModelProvider,
+        "templateModelProvider", templateModelProvider,
+        "templateProviderSectionName", templateProviderSectionName,
+        "templateProviderBaseUrl", templateProviderBaseUrl,
+        "templateProviderWireApi", templateProviderWireApi,
+        "templateProviderRequiresOpenAIAuth", templateProviderRequiresOpenAIAuth
     ))
 }
 
@@ -193,6 +207,59 @@ CodexProfilesResolvePath(root, pathText) {
         return pathText
     }
     return root "\" pathText
+}
+
+; 读取 Codex 预设附加设置。
+; 入参：root。
+; 出参：Map，至少包含：
+; - sharedTemplateEnabled：是否开启“通用模板同步”。
+; - sharedTemplateMemberIds：参与模板同步的 profile id 数组。
+CodexProfilesReadSettings(root := "") {
+    root := CodexProfilesRoot(root)
+    settingsPath := root "\settings.ini"
+    enabledText := IniRead(settingsPath, "shared_template", "enabled", "0")
+    memberIdsText := IniRead(settingsPath, "shared_template", "member_ids", "")
+    return Map(
+        "sharedTemplateEnabled", CodexProfilesParseIniBool(enabledText),
+        "sharedTemplateMemberIds", CodexProfilesSplitCsv(memberIdsText)
+    )
+}
+
+; 解析 ini 里的布尔文本。
+; 入参：任意文本。
+; 出参：true / false。
+CodexProfilesParseIniBool(valueText) {
+    normalized := StrLower(Trim(valueText, " `t`r`n"))
+    return normalized = "1"
+        || normalized = "true"
+        || normalized = "yes"
+        || normalized = "on"
+}
+
+; 把逗号分隔文本拆成数组。
+; 入参：逗号分隔字符串。
+; 出参：去空白后的数组。
+CodexProfilesSplitCsv(text) {
+    values := []
+    for _, piece in StrSplit(text, ",") {
+        item := Trim(piece, " `t`r`n")
+        if (item != "") {
+            values.Push(item)
+        }
+    }
+    return values
+}
+
+; 判断数组里是否包含指定文本。
+; 入参：数组与要查找的文本。
+; 出参：true / false。
+CodexProfilesArrayContains(values, expected) {
+    for _, value in values {
+        if (value = expected) {
+            return true
+        }
+    }
+    return false
 }
 
 ; 查找指定 id 的 profile。
@@ -395,6 +462,242 @@ CodexProfilesFilesEqual(pathA, pathB) {
     return true
 }
 
+; 把 UTF-8 文本写入文件。
+; 入参：路径与文本。
+; 出参：无。
+CodexProfilesWriteUtf8Text(path, text) {
+    SplitPath(path, , &dir)
+    if (dir != "" && !DirExist(dir)) {
+        DirCreate(dir)
+    }
+    if FileExist(path) {
+        FileDelete(path)
+    }
+    FileAppend(text, path, "UTF-8")
+}
+
+; 把多行数组重新拼回 LF 文本。
+; 入参：字符串数组。
+; 出参：LF 文本。
+CodexProfilesJoinLines(lines) {
+    text := ""
+    for index, line in lines {
+        if (index > 1) {
+            text .= "`n"
+        }
+        text .= line
+    }
+    return text
+}
+
+; 重写顶层 model_provider 行。
+; 入参：
+; - text：原始 config.toml 文本。
+; - hasModelProvider：true=应显式处理 model_provider；false=保持原样。
+; - modelProviderValue：目标值；若为空字符串则表示删除该行。
+; 出参：重写后的文本。
+CodexProfilesRewriteTopLevelModelProvider(text, hasModelProvider, modelProviderValue) {
+    if !hasModelProvider {
+        return text
+    }
+
+    normalized := StrReplace(text, "`r", "")
+    lines := StrSplit(normalized, "`n")
+    preamble := []
+    sectionStart := lines.Length + 1
+
+    for index, line in lines {
+        if RegExMatch(Trim(line, " `t"), "^\[") {
+            sectionStart := index
+            break
+        }
+    }
+
+    Loop sectionStart - 1 {
+        line := lines[A_Index]
+        if RegExMatch(Trim(line, " `t"), "^model_provider\s*=") {
+            continue
+        }
+        preamble.Push(line)
+    }
+
+    if (modelProviderValue != "") {
+        preamble.InsertAt(1, "model_provider = " Chr(34) modelProviderValue Chr(34))
+    }
+
+    merged := []
+    for _, line in preamble {
+        merged.Push(line)
+    }
+    Loop lines.Length - sectionStart + 1 {
+        merged.Push(lines[sectionStart + A_Index - 1])
+    }
+    return CodexProfilesJoinLines(merged)
+}
+
+; 构造某套预设专属的 [model_providers] 块。
+; 入参：profile。
+; 出参：块文本；若该预设未声明 provider section，则返回空字符串。
+CodexProfilesBuildModelProvidersBlock(profile) {
+    sectionName := profile["templateProviderSectionName"]
+    if (sectionName = "") {
+        return ""
+    }
+
+    requiresOpenAIAuth := CodexProfilesParseIniBool(profile["templateProviderRequiresOpenAIAuth"]) ? "true" : "false"
+    blockLines := [
+        "[model_providers]",
+        "[model_providers." sectionName "]",
+        "name = " Chr(34) sectionName Chr(34),
+        "base_url = " Chr(34) profile["templateProviderBaseUrl"] Chr(34),
+        "wire_api = " Chr(34) profile["templateProviderWireApi"] Chr(34),
+        "requires_openai_auth = " requiresOpenAIAuth
+    ]
+    return CodexProfilesJoinLines(blockLines)
+}
+
+; 重写 [model_providers] 顶层块。
+; 入参：原始文本与目标 profile。
+; 出参：重写后的文本。
+CodexProfilesRewriteModelProvidersSection(text, profile) {
+    blockText := CodexProfilesBuildModelProvidersBlock(profile)
+    if (blockText = "") {
+        return text
+    }
+
+    normalized := StrReplace(text, "`r", "")
+    lines := StrSplit(normalized, "`n")
+    newBlockLines := StrSplit(blockText, "`n")
+    startIndex := 0
+    endIndex := lines.Length
+    insertBeforeIndex := 0
+
+    for index, line in lines {
+        trimmed := Trim(line, " `t")
+        if (trimmed = "[model_providers]") {
+            startIndex := index
+            continue
+        }
+        if (startIndex > 0
+            && RegExMatch(trimmed, "^\[[A-Za-z0-9_-]+\]$")
+            && trimmed != "[model_providers]") {
+            endIndex := index - 1
+            break
+        }
+        if (startIndex = 0
+            && insertBeforeIndex = 0
+            && RegExMatch(trimmed, "^\[[A-Za-z0-9_-]+\]$")) {
+            insertBeforeIndex := index
+        }
+    }
+
+    merged := []
+    if (startIndex > 0) {
+        Loop startIndex - 1 {
+            merged.Push(lines[A_Index])
+        }
+        for _, line in newBlockLines {
+            merged.Push(line)
+        }
+        Loop lines.Length - endIndex {
+            merged.Push(lines[endIndex + A_Index])
+        }
+        return CodexProfilesJoinLines(merged)
+    }
+
+    if (insertBeforeIndex = 0) {
+        insertBeforeIndex := lines.Length + 1
+    }
+
+    Loop insertBeforeIndex - 1 {
+        merged.Push(lines[A_Index])
+    }
+    for _, line in newBlockLines {
+        merged.Push(line)
+    }
+    Loop lines.Length - insertBeforeIndex + 1 {
+        merged.Push(lines[insertBeforeIndex + A_Index - 1])
+    }
+    return CodexProfilesJoinLines(merged)
+}
+
+; 基于某次 live 配置，生成“某套预设最终应写回的 config.toml 文本”。
+; 入参：live config 文本与目标 profile。
+; 出参：目标 profile 的 config 文本。
+CodexProfilesBuildConfigForProfileFromTemplate(sourceConfigText, profile) {
+    rewritten := CodexProfilesRewriteTopLevelModelProvider(
+        sourceConfigText,
+        profile["hasTemplateModelProvider"],
+        profile["templateModelProvider"]
+    )
+    rewritten := CodexProfilesRewriteModelProvidersSection(rewritten, profile)
+    return rewritten
+}
+
+; 根据共享模板设置，构造本次要同步的 config 计划。
+; 入参：root、来源预设、live config 文本。
+; 出参：Map(profileId => configText)。
+CodexProfilesBuildConfigSyncPlan(root, sourceProfile, liveConfigText) {
+    root := CodexProfilesRoot(root)
+    plan := Map()
+    settings := CodexProfilesReadSettings(root)
+
+    if !(settings["sharedTemplateEnabled"]
+        && CodexProfilesArrayContains(settings["sharedTemplateMemberIds"], sourceProfile["id"])) {
+        plan[sourceProfile["id"]] := liveConfigText
+        return plan
+    }
+
+    profiles := CodexProfilesLoadManifest(root)
+    for _, memberId in settings["sharedTemplateMemberIds"] {
+        profile := CodexProfilesFindById(profiles, memberId)
+        if !IsObject(profile) {
+            continue
+        }
+        if !CodexProfileIsConfigured(profile) {
+            continue
+        }
+        plan[memberId] := CodexProfilesBuildConfigForProfileFromTemplate(liveConfigText, profile)
+    }
+
+    if !plan.Has(sourceProfile["id"]) {
+        plan[sourceProfile["id"]] := CodexProfilesBuildConfigForProfileFromTemplate(liveConfigText, sourceProfile)
+    }
+    return plan
+}
+
+; 先把即将写回的 config 计划逐个落到临时文件并做语法校验。
+; 入参：root、config 计划 Map。
+; 出参：Map("ok", bool, "message", 文本)。
+CodexProfilesValidateConfigSyncPlan(root, configPlan) {
+    root := CodexProfilesRoot(root)
+    profiles := CodexProfilesLoadManifest(root)
+    tempPaths := []
+
+    try {
+        for profileId, configText in configPlan {
+            profile := CodexProfilesFindById(profiles, profileId)
+            if !IsObject(profile) {
+                return Map("ok", false, "message", "共享模板计划引用了未知预设：" profileId)
+            }
+
+            tempPath := A_Temp "\ahk_codex_profile_sync_" A_TickCount "_" profileId ".toml"
+            tempPaths.Push(tempPath)
+            CodexProfilesWriteUtf8Text(tempPath, configText)
+
+            validation := CodexProfileRunPythonValidation(profile["authPath"], tempPath)
+            if !validation["ok"] {
+                return Map("ok", false, "message", profile["displayName"] " 共享模板生成结果校验失败：" validation["message"])
+            }
+        }
+        return Map("ok", true, "message", "共享模板配置校验通过")
+    } finally {
+        for _, tempPath in tempPaths {
+            try FileDelete(tempPath)
+        }
+    }
+}
+
 ; 读取最后一次成功切换到哪套预设。
 ; 入参：root。
 ; 出参：命中的 profile Map；无记录或记录已失效时返回 0。
@@ -447,17 +750,23 @@ CodexProfilesResolveSourceProfileForSync(root := "", liveDir := "", targetProfil
     return Map("id", lastProfile["id"], "profile", lastProfile, "matchMode", "last_switch")
 }
 
-; 在真正切换前，把当前 live auth.json 与 config.toml 整文件回写到“正在离开的那套预设”。
+; 在真正切换前，把当前 live auth.json 回写到来源预设，
+; 并按设置决定是否把 live config.toml 扩散到通用模板组内的多套预设。
 ; 入参：
 ; - profile：来源预设；正常来自 CodexProfilesResolveSourceProfileForSync() 的结果。
 ; - liveDir：当前 live 目录。
+; - root：预设根目录。
 ; 出参：Map("ok", bool, "message", 文本)。
 ; 设计取舍：
-; 1) 这里改为整文件同步 auth.json + config.toml。
-;    原因是用户会在 live 运行态里真实安装/关闭插件、调整 provider / model / MCP，
-;    如果只回写 auth，那么下一次切回预设时，旧 config.toml 会把这些 live 变更全部覆盖掉。
-; 2) 回写前仍复用现有 Python helper 校验 live JSON/TOML，避免把损坏的 live 文件写回预设目录。
-CodexProfilesSyncLiveFilesToProfile(profile, liveDir) {
+; 1) auth.json 仍只回写当前来源预设，不跨 provider 扩散。
+;    因为 token / API Key 本来就是各 provider 各自独立的身份信息。
+; 2) config.toml 则支持“通用模板同步”：
+;    开关开启后，会把当前 live config 作为公共模板来源，重新生成模板组内每套预设的 config，
+;    仅保留各自声明好的 provider 差异，其他内容统一追平。
+; 3) 回写前仍复用现有 Python helper 校验 live JSON/TOML 与生成后的每份 config，
+;    避免把损坏或不可解析的配置写回 secrets。
+CodexProfilesSyncLiveFilesToProfile(profile, liveDir, root := "") {
+    root := CodexProfilesRoot(root)
     if !IsObject(profile) {
         return Map("ok", true, "message", "当前 live 未匹配任何预设，无需回写")
     }
@@ -473,21 +782,44 @@ CodexProfilesSyncLiveFilesToProfile(profile, liveDir) {
         return Map("ok", false, "message", "当前 live 配置校验失败，拒绝回写：" validation["message"])
     }
 
+    liveConfigText := FileRead(liveConfig, "UTF-8")
+    configPlan := CodexProfilesBuildConfigSyncPlan(root, profile, liveConfigText)
+    configPlanValidation := CodexProfilesValidateConfigSyncPlan(root, configPlan)
+    if !configPlanValidation["ok"] {
+        return configPlanValidation
+    }
+
     SplitPath(profile["authPath"], , &authDir)
-    SplitPath(profile["configPath"], , &configDir)
     if !DirExist(authDir) {
         DirCreate(authDir)
-    }
-    if !DirExist(configDir) {
-        DirCreate(configDir)
     }
 
     try {
         FileCopy(liveAuth, profile["authPath"], true)
-        FileCopy(liveConfig, profile["configPath"], true)
-        if !(CodexProfilesFilesEqual(liveAuth, profile["authPath"])
-            && CodexProfilesFilesEqual(liveConfig, profile["configPath"])) {
-            throw Error("auth.json / config.toml 回写后比对失败")
+        for profileId, configText in configPlan {
+            targetProfile := CodexProfilesFindById(CodexProfilesLoadManifest(root), profileId)
+            if !IsObject(targetProfile) {
+                throw Error("共享模板回写时找不到预设：" profileId)
+            }
+            SplitPath(targetProfile["configPath"], , &configDir)
+            if !DirExist(configDir) {
+                DirCreate(configDir)
+            }
+            CodexProfilesWriteUtf8Text(targetProfile["configPath"], configText)
+        }
+
+        if !CodexProfilesFilesEqual(liveAuth, profile["authPath"]) {
+            throw Error("auth.json 回写后比对失败")
+        }
+        for profileId, configText in configPlan {
+            targetProfile := CodexProfilesFindById(CodexProfilesLoadManifest(root), profileId)
+            if (FileRead(targetProfile["configPath"], "UTF-8") != configText) {
+                throw Error(targetProfile["displayName"] " 的 config.toml 回写后比对失败")
+            }
+        }
+
+        if (configPlan.Count > 1) {
+            return Map("ok", true, "message", "已同步来源 auth，并按通用模板追平 " configPlan.Count " 套预设 config")
         }
         return Map("ok", true, "message", "已同步来源预设整文件：" profile["displayName"])
     } catch as err {
@@ -520,7 +852,7 @@ CodexProfilesSwitch(profileId, root := "", liveDir := "") {
 
     sourceProfile := CodexProfilesResolveSourceProfileForSync(root, liveDir, profileId)
     if IsObject(sourceProfile) {
-        syncResult := CodexProfilesSyncLiveFilesToProfile(sourceProfile["profile"], liveDir)
+        syncResult := CodexProfilesSyncLiveFilesToProfile(sourceProfile["profile"], liveDir, root)
         if !syncResult["ok"] {
             return Map("ok", false, "message", syncResult["message"], "backupDir", "")
         }
