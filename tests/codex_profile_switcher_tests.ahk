@@ -98,6 +98,10 @@ display_name=OpenAI Official
 auth_path=secrets\openai_official\auth.json
 config_path=secrets\openai_official\config.toml
 template_model_provider=
+template_provider_section_name=custom
+template_provider_base_url=https://code.rpgame.net
+template_provider_wire_api=responses
+template_provider_requires_openai_auth=true
 
 [right_code]
 display_name=Right Code
