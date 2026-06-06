@@ -30,7 +30,8 @@ CodexProfileRunAllTests() {
         CodexProfileTestActiveDetectionAcceptsAuthRefresh(root, liveDir)
         CodexProfileTestTrayMenuCanBeBuilt(root, liveDir)
         CodexProfileTestValidationCache(root)
-        CodexProfileTestSwitchSyncsLiveAuthBackToSource(root, liveDir)
+        CodexProfileTestSwitchSyncsLiveFilesBackToSource(root, liveDir)
+        CodexProfileTestSwitchFallsBackToLastSwitchForFullConfigSync(root, liveDir)
         CodexProfileTestSwitchWritesBackupAndLive(root, liveDir)
         CodexProfileTestInvalidProfileDoesNotChangeLive(root, liveDir)
     } finally {
@@ -171,13 +172,33 @@ CodexProfileTestValidationCache(root) {
     CodexProfileAssertEqual(g_CodexProfilesValidationRunCount, 1, "文件未变化时不应再次启动 Python")
 }
 
-CodexProfileTestSwitchSyncsLiveAuthBackToSource(root, liveDir) {
+CodexProfileTestSwitchSyncsLiveFilesBackToSource(root, liveDir) {
     refreshedAuth := "{`"OPENAI_API_KEY`":`"haibao-key`",`"auth_mode`":`"login`",`"last_refresh`":`"2026-05-29T09:00:00Z`",`"tokens`":{`"refresh_token`":`"new-refresh-token`"}}"
     CodexProfileWriteText(liveDir "\auth.json", refreshedAuth)
+    originalConfig := "model_provider = `"custom`"`nmodel = `"gpt-test`"`n"
 
     result := CodexProfilesSwitch("openai_official", root, liveDir)
-    CodexProfileAssertTrue(result["ok"], "切换前应先把来源预设 auth 回写成功")
+    CodexProfileAssertTrue(result["ok"], "切换前应先把来源预设整文件回写成功")
     CodexProfileAssertEqual(FileRead(root "\secrets\haibao\auth.json", "UTF-8"), refreshedAuth, "来源预设 auth 应被同步成最新 live token")
+    CodexProfileAssertEqual(FileRead(root "\secrets\haibao\config.toml", "UTF-8"), originalConfig, "config 未漂移时，来源预设 config 也应保持与 live 一致")
+}
+
+CodexProfileTestSwitchFallsBackToLastSwitchForFullConfigSync(root, liveDir) {
+    profiles := CodexProfilesLoadManifest(root)
+    CodexProfilesWriteLastSwitchState(root, profiles[1])
+
+    refreshedAuth := "{`"OPENAI_API_KEY`":`"haibao-key`",`"auth_mode`":`"login`",`"last_refresh`":`"2026-06-06T07:44:38Z`",`"tokens`":{`"refresh_token`":`"last-switch-token`"}}"
+    driftedConfig := "model_provider = `"custom`"`nmodel = `"manual-drift`"`nmodel_reasoning_effort = `"low`"`n"
+    CodexProfileWriteText(liveDir "\auth.json", refreshedAuth)
+    CodexProfileWriteText(liveDir "\config.toml", driftedConfig)
+
+    activeId := CodexProfilesDetectActiveId(root, liveDir)
+    CodexProfileAssertEqual(activeId, "", "config 漂移后，托盘当前态识别仍应保持保守")
+
+    result := CodexProfilesSwitch("openai_official", root, liveDir)
+    CodexProfileAssertTrue(result["ok"], "即使 config 已漂移，仍应依赖 last_switch 回写来源整文件")
+    CodexProfileAssertEqual(FileRead(root "\secrets\haibao\auth.json", "UTF-8"), refreshedAuth, "last_switch 兜底时也应回写来源 auth")
+    CodexProfileAssertEqual(FileRead(root "\secrets\haibao\config.toml", "UTF-8"), driftedConfig, "last_switch 兜底时也应回写来源 config")
 }
 
 CodexProfileTestSwitchWritesBackupAndLive(root, liveDir) {

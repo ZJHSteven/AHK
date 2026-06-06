@@ -1,5 +1,23 @@
 # ExecPlan
 
+## 2026-06-06 Codex 预设切换改为整文件回填并追平最近运行态
+
+### 背景
+- 目标：把 Codex 预设切换从“只回写来源 `auth.json`”升级为“离开当前预设前，把 live `auth.json + config.toml` 整文件一起回写到来源预设”。
+- 新证据：用户确认自己会在 live 运行过程中手动安装/关闭插件、调整 provider / model / MCP 等；如果切换器只回写 `auth.json`，那么这些 live `config.toml` 改动在下一次切回预设时会被旧预设整文件覆盖，等于“改了白改”。
+- 已知风险：当 live `config.toml` 已被手改到不再字节匹配任一预设时，原来的 `DetectActiveMatch()` 会失配，导致连来源预设都认不出来，从而无法回写。
+- 预期结果：
+  - 切换前优先整文件回写当前 live `auth.json + config.toml` 到来源预设。
+  - 若 live 已漂移到无法再精确匹配预设，则回退到 `state.ini` 里的 `last_switch` 作为来源预设兜底。
+  - 保持托盘“当前预设”标记的保守策略，不因 `last_switch` 兜底而误报当前态。
+  - 结合最近备份，把 `OpenAI Official` 预设追到目前可确认的最新运行态。
+
+### 实现步骤
+1. 扩展 `modules/codex_profile_switcher.ahk`：新增“来源预设解析”兜底逻辑，切换前改为整文件同步 `auth.json + config.toml`，并在回写后做双文件字节比对。
+2. 保持 `CodexProfilesDetectActiveMatch()` 只做保守识别；新增仅供切换流程使用的 `last_switch` 回退函数，避免托盘状态误报。
+3. 补测试：覆盖“config 漂移后仍可依赖 last_switch 回写来源预设整文件”、“切换前会同步来源 config”、“失败回滚不污染 live”。
+4. 更新 `PROGRESS.md` 记录策略变化，并把本机 `OpenAI Official` 预设追到最近一次可确认的 OpenAI 运行态备份。
+
 ## 2026-05-29 Codex 三套预设统一 MCP 真源并收敛重复插件
 
 ### 背景
