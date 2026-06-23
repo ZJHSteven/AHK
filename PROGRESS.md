@@ -1,13 +1,16 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 现状：Codex 预设现已从“`custom / right_code` 历史命名”收口到统一的 `OpenAI` provider 命名；`海豹云-天才程序员`、`Right Code` 与新增的 `何意味` 都会在共享模板回写时生成 `model_provider = "OpenAI"` 与 `[model_providers.OpenAI]`，`OpenAI Official` 仍保持“顶层不显式写 `model_provider`”的保守策略。
+- 已完成：`config/codex_profiles/profiles.ini`、`settings.ini`、本机 secrets 与当前 live `~/.codex/config.toml` 已统一补成四套预设：`haibao / openai_official / right_code / heweiyi`；共享模板成员也已扩到四套。
+- 已完成：按用户本轮“域名改 IP”要求，已把中转 provider 地址统一改成 `http://198.18.1.191`。该 IP 是现场从 `ai.websee.top` 解析得到；同时确认 `https://ai.websee.top` 当前可返回 `200`，而裸 `https://198.18.1.191` 会因 SSL 建链失败不可直接替代，因此本轮显式按用户要求落为 `http://` + 裸 IP。
 - 现状：已新增 AHK 托盘菜单能力：`查看热键` 使用显式注册表展示当前加载热键，`Codex 预设` 支持从托盘或 `Ctrl+Alt+F12` 弹出菜单切换多套 Codex 配置；沙盒中转 `Ctrl+Alt+C` 已升级为“Explorer 原生选中读取优先、剪贴板兜底”，并额外兼容“右侧预览窗格/第三方预览处理器抢焦点”的情况。
 - 已完成：Codex 预设切换现在会在真正覆盖目标预设前，先把当前 live `auth.json + config.toml` 整文件回写到来源预设；即使 live `config.toml` 已因用户运行时手改而不再字节匹配任何预设，也会继续回退到 `state.ini` 中的 `last_switch` 作为来源预设兜底，避免“插件/MCP/provider 改了却在下次切回时被旧预设整文件覆盖”。
-- 已完成：新增 `config/codex_profiles/settings.ini` 与三套预设的 provider 模板元数据。开启 `shared_template.enabled=1` 后，任意一套成员预设的 live `config.toml` 都会被视为“公共模板来源”，同步追平到 `haibao / openai_official / right_code` 三套预设，仅保留各自 provider 差异。
+- 已完成：新增 `config/codex_profiles/settings.ini` 与四套预设的 provider 模板元数据。开启 `shared_template.enabled=1` 后，任意一套成员预设的 live `config.toml` 都会被视为“公共模板来源”，同步追平到 `haibao / openai_official / right_code / heweiyi` 四套预设，仅保留各自 provider 差异。
 - 已完成：已核对 `OpenAI Official` 与海豹云/当前 live 的结构差异；确认 MCP 变少的根因就是 `openai_official/config.toml` 确实缺少 `context7 / github / figma / stitch` 等 MCP 定义，且插件清单也比当前 live 更少。
-- 已完成：三套预设现已按“plain MCP 为真源”统一补齐 `context7 / github / cloudflare-api`；`Right Code` 已朝海豹云结构对齐，仅保留 provider 差异。
+- 已完成：四套预设现已按“plain MCP 为真源”统一补齐 `context7 / github / cloudflare-api`；`Right Code` 与 `何意味` 均朝海豹云结构对齐，仅保留 provider 差异。
 - 已完成：为避免和已迁移到全局的 skills / MCP 重复，`github@openai-curated`、`cloudflare@openai-curated` 已从三套预设里改为关闭；`OpenAI Official` 额外关闭了用户点名的 `canva / figma / stripe / vercel` plugin。
-- 已完成：新增 Codex 预设清单 `config/codex_profiles/profiles.ini`，第一版包含 `海豹云-天才程序员`、`OpenAI Official`、`Right Code` 三套；真实 `auth.json/config.toml` 放入已忽略的 `secrets` 目录，不进入 Git。
+- 已完成：新增 Codex 预设清单 `config/codex_profiles/profiles.ini`，当前包含 `海豹云-天才程序员`、`OpenAI Official`、`Right Code`、`何意味` 四套；真实 `auth.json/config.toml` 放入已忽略的 `secrets` 目录，不进入 Git。
 - 已完成：切换流程会按需校验 JSON/TOML、切换前备份 live 配置、写入后做字节级比对，成功/失败只用鼠标附近 ToolTip 提示。
 - 已完成：`modules/sandbox_bridge.ahk` 新增 Shell COM 读取路径：当前前台位于资源管理器主窗口或其子窗口时，优先通过 `Shell.Application.Windows -> Document.SelectedItems() -> FolderItem.Path` 直接读取选中项；原 `Send("^c") + ClipWait + A_Clipboard` 方案保留为 fallback，并继续写详细日志。
 - 已完成：修复 Shell COM 集合枚举 bug。此前日志连续报 `This value of type "Integer" has no property named "HWND"`，根因是把 `ShellWindows` 的迭代结果误当成窗口对象；现已改为 `Count + Item(i)` 方式读取。
@@ -19,7 +22,7 @@
 - 已验证：`tests\sandbox_bridge_tests.ahk`、`tests\hotkey_help_tests.ahk`、`tests\codex_profile_switcher_tests.ahk`、`tests\markdown_reference_link_inliner_tests.ahk` 与 `main.ahk /Validate` 全部通过。
 - 已验证：本轮已补“auth refresh 后仍能识别当前预设”、“切换前先回写来源整文件”与“config 已漂移时仍可依赖 last_switch 回写来源整文件”三条自动化用例；落地后需要再次执行 `tests\codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 做回归确认。
 - 已验证：Cloudflare 插件缓存当前真实结构是 `skills + .mcp.json`，其中 `.mcp.json` 暴露的就是 `cloudflare-api -> https://mcp.cloudflare.com/mcp`；GitHub 插件缓存真实结构则是 `skills + .app.json`，说明把 `cloudflare/github` plugin 与 plain MCP 同时打开，确实会形成重复入口。
-- 下一步：Reload AHK 后，分别在“预览窗格关闭”和“预览窗格打开”两种状态下，对同一文件各试一次 `Ctrl+Alt+C`；若仍异常，优先读取 `logs\sandbox_bridge.log` 中新增的 `match_hwnd / match_exe / capture explorer:` 日志，再判断是根窗口识别失败，还是 `SelectedItems()` 为空。
+- 下一步：执行一轮 Codex 预设专项回归：确认 `何意味` 能在托盘菜单里被识别，确认切到任一中转预设后 live `config.toml` 仍保持 `OpenAI` 命名和 `http://198.18.1.191`，再回头继续 Explorer 预览窗格的手工复现。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：热键帮助采用显式注册表，不从注释自动解析。
@@ -34,6 +37,10 @@
   原因：`last_switch` 只用于“切换前尽量保存当前 live 演化结果”，不代表 live 当前仍与该预设一致；把它直接拿来当 UI 当前态会误导用户。
 - 决策F：三套 provider 预设支持“通用模板同步”开关；开关开启后，公共 `config.toml` 内容以当前 live 为真源，自动追平到模板组内所有预设，仅保留各自 provider patch。
   原因：用户实际诉求不是维护三份长期漂移的配置，而是“换 provider 不换其余内容”；因此 provider 之外的插件、MCP、marketplaces、projects、模型参数都应跟随当前 live 一起同步。
+- 决策F.1：中转 provider 的逻辑名统一使用 `OpenAI`，不再沿用 `custom / right_code`。
+  原因：共享模板会按 `profiles.ini` 重建 provider block；若逻辑名不统一，live 手改后仍会在下一次切换被旧命名覆盖，用户也难以从配置表面判断几套中转其实是同一种 provider。
+- 决策F.2：本轮中转 provider 地址显式落为 `http://198.18.1.191`。
+  原因：这是现场从 `ai.websee.top` 解析得到、且用户明确要求使用的裸 IP 形式；虽然域名根路径当前返回 `200`、裸 IP 根路径返回 `403`，但此处仍以用户指定的目标形态作为配置真源，后续若 API 实测需要带 Host/SNI，再另行回退或细化。
 - 决策G：Codex provider 预设当前以 plain `mcp_servers.context7 / github / cloudflare-api` 为主要真源，而不是依赖同名 curated plugin 继续二次提供重复 skills/MCP。
   原因：这台机器上 Cloudflare plugin 真实结构是 `skills + .mcp.json`，GitHub plugin 真实结构是 `skills + .app.json`；而相关 skills 已迁到全局，若 plugin 与 plain MCP 同时启用，入口会重复、状态更混乱。
 - 决策H：资源管理器场景优先直接读取 Explorer 选中项，不再把“真实路径获取”完全绑定到剪贴板复制链路。
@@ -46,7 +53,8 @@
 - 坑2：`OpenAI Official` 和 `Right Code` 初始只在 `profiles.ini` 里占位；没有补齐对应 `secrets/<profile_id>/auth.json` 与 `config.toml` 前，菜单会显示但禁用。
 - 坑3：如果 live `.codex` 被外部手动改到不匹配任何预设，托盘菜单不会误报“当前”；下次切换仍会先备份这个未知状态，再写入目标预设。
 - 坑3.1：虽然托盘菜单不会把“已经漂移的 live”误标成当前预设，但切换前的同步流程现在会依赖 `state.ini -> last_switch` 兜底，把这份 live 整文件回写到最近一次成功切入的来源预设；这是为了保住用户运行期手改的配置，不是 UI 当前态判定。
-- 坑3.2：开启 `settings.ini -> shared_template.enabled=1` 后，来源预设的 live `config.toml` 会自动扩散到模板组内其他成员预设；因此如果只是临时实验某个 provider 的私有配置，应先关掉该开关，避免把实验配置同步给另外两套预设。
+- 坑3.2：开启 `settings.ini -> shared_template.enabled=1` 后，来源预设的 live `config.toml` 会自动扩散到模板组内其他成员预设；因此如果只是临时实验某个 provider 的私有配置，应先关掉该开关，避免把实验配置同步给另外三套预设。
+- 坑3.3：现在 `haibao / right_code / heweiyi` 的顶层 `model_provider` 都会被强制写成 `OpenAI`；如果只手改某份 secrets 或 live 文件里的旧 `custom/right_code` 字样，不同步更新 `profiles.ini`，下一次切换仍会被共享模板改回。
 - 坑4：`OpenAI Official` 的 `auth.json` 不是静态 API Key 文件，还会包含 `auth_mode / last_refresh / tokens`；如果切换器只做“预设覆盖 live”，不做“离开前回写来源 auth”，下次切回就会被旧 refresh token 覆盖。
 - 坑5：`cloudflare@openai-curated` 与 `github@openai-curated` 并不只是“一个按钮开关”那么简单：前者底层是 `skills + .mcp.json`，后者底层是 `skills + .app.json`。如果 plain MCP 已经单独接好、相关 skills 又迁到了全局，再继续开 plugin 只会制造重复入口。
 - 坑6：沙盒中转 `Ctrl+Alt+C` 若在资源管理器已选中文件但仍提示未拿到路径，先看 `logs/sandbox_bridge.log`，重点检查活动窗口、剪贴板文本长度、候选路径和 `FileExist()` 结果。
