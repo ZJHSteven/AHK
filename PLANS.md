@@ -1,5 +1,28 @@
 # ExecPlan
 
+## 2026-06-23 Codex 中转预设统一改名为 OpenAI 并新增“何意味”
+
+### 背景
+- 目标：把现有中转型 Codex 预设的 provider 标识统一成 `OpenAI`，避免 `custom / right_code` 这类历史名字继续在 live `config.toml` 与共享模板回写里来回漂移。
+- 新需求：
+  - `海豹云-天才程序员` 与 `Right Code` 两套中转预设，后续都使用同一套 provider 名称：`OpenAI`。
+  - `OpenAI Official` 仍保持“顶层不显式写 `model_provider`”的策略，但其 provider section 也要与模板侧统一到 `OpenAI`。
+  - 新增一套显示名为 `何意味` 的中转预设，并按用户提供的 `OPENAI_API_KEY` 与 provider 模板初始化。
+  - 中转 provider 的地址从旧的 `https://code.rpgame.net` 收口到用户本轮指定的新地址；若仓库内没有独立可确认的 IP 版本，则先按用户本轮明确贴出的地址落盘，再保留后续把域名替换为裸 IP 的扩展空间。
+- 当前问题：
+  - `shared_template.enabled=1` 开启后，切换流程会按 `profiles.ini` 中声明的 provider patch 重建 `[model_providers.*]`，因此只改 live 或 secrets 里的单份 `config.toml` 不足以持久化。
+  - 现有测试夹具与断言仍把 `custom / right_code` 视为预期值；若不一起更新，后续回归测试会全部失真。
+- 预期结果：
+  - `profiles.ini`、本机 secrets、live 配置与测试预期统一到新的 `OpenAI` 命名。
+  - 新增 `何意味` 预设后，托盘菜单与校验流程能正常识别它。
+  - 共享模板同步后，各中转预设只保留“是否顶层写 `model_provider`”这类最小差异，不再保留旧命名。
+
+### 实现步骤
+1. 更新 `config/codex_profiles/profiles.ini`，把中转预设的 `template_model_provider` / `template_provider_section_name` 统一改成 `OpenAI`，并补入 `何意味` 预设元数据。
+2. 同步修正本机 `config/codex_profiles/secrets/*/config.toml` 与新增 `heweiyi` secrets，使现存预设和新预设在下次切换前就处于一致结构。
+3. 补齐或更新 `auth.json` / `config.toml` 语法校验与 `tests/codex_profile_switcher_tests.ahk` 夹具，覆盖“共享模板把中转预设统一改写成 OpenAI provider”和“新增何意味预设可被识别”。
+4. 更新 `PROGRESS.md` 记录本轮 provider 命名与新预设决策，并执行 `tests\codex_profile_switcher_tests.ahk`、`main.ahk /Validate` 与 Python 配置校验，确认没有回归。
+
 ## 2026-06-07 Codex 三套预设新增通用模板同步开关
 
 ### 背景
