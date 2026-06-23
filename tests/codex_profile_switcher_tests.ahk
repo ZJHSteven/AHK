@@ -77,6 +77,15 @@ CodexProfileWriteText(path, text) {
     FileAppend(text, path, "UTF-8")
 }
 
+CodexProfileFindById(profiles, profileId) {
+    for _, profile in profiles {
+        if (profile["id"] = profileId) {
+            return profile
+        }
+    }
+    throw Error("测试夹具里找不到预设：" profileId)
+}
+
 CodexProfileCreateFixture(root, liveDir) {
     DirCreate(root)
     DirCreate(liveDir)
@@ -153,11 +162,12 @@ CodexProfileTestManifestParse(root) {
 
 CodexProfileTestConfiguredDetection(root) {
     profiles := CodexProfilesLoadManifest(root)
-    CodexProfileAssertTrue(CodexProfileIsConfigured(profiles[1]), "完整预设应被视为已配置")
+    officialProfile := CodexProfileFindById(profiles, "openai_official")
+    CodexProfileAssertTrue(CodexProfileIsConfigured(officialProfile), "完整预设应被视为已配置")
 
-    FileDelete(profiles[2]["authPath"])
-    CodexProfileAssertFalse(CodexProfileIsConfigured(profiles[2]), "缺 auth 文件应被视为未配置")
-    CodexProfileWriteText(profiles[2]["authPath"], "{`"OPENAI_API_KEY`":`"official-key`"}")
+    FileDelete(officialProfile["authPath"])
+    CodexProfileAssertFalse(CodexProfileIsConfigured(officialProfile), "缺 auth 文件应被视为未配置")
+    CodexProfileWriteText(officialProfile["authPath"], "{`"OPENAI_API_KEY`":`"official-key`"}")
 }
 
 CodexProfileTestActiveDetection(root, liveDir) {
@@ -216,7 +226,7 @@ CodexProfileTestSwitchSyncsLiveFilesBackToSource(root, liveDir) {
 
 CodexProfileTestSwitchFallsBackToLastSwitchForFullConfigSync(root, liveDir) {
     profiles := CodexProfilesLoadManifest(root)
-    CodexProfilesWriteLastSwitchState(root, profiles[1])
+    CodexProfilesWriteLastSwitchState(root, CodexProfileFindById(profiles, "haibao"))
 
     refreshedAuth := "{`"OPENAI_API_KEY`":`"haibao-key`",`"auth_mode`":`"login`",`"last_refresh`":`"2026-06-06T07:44:38Z`",`"tokens`":{`"refresh_token`":`"last-switch-token`"}}"
     driftedConfig := "model_provider = `"OpenAI`"`nmodel = `"manual-drift`"`nmodel_reasoning_effort = `"low`"`n"
@@ -362,9 +372,9 @@ enabled = true
     CodexProfileAssertTrue(InStr(rightCodeAfter, "[model_providers.OpenAI]"), "RC 应改写成 OpenAI provider section")
     CodexProfileAssertTrue(InStr(rightCodeAfter, quotedTransitBaseUrl), "RC 应恢复成 URL")
     CodexProfileAssertFalse(InStr(rightCodeAfter, "disable_response_storage = true"), "RC 的旧私有差异应被公共模板抹平")
-    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedOpenAIProvider), "何意味应改写成 OpenAI 顶层 provider")
-    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedSharedModel), "何意味应同步公共 model")
-    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedTransitBaseUrl), "何意味应恢复成 URL")
+    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedOpenAIProvider), "何一卫应改写成 OpenAI 顶层 provider")
+    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedSharedModel), "何一卫应同步公共 model")
+    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedTransitBaseUrl), "何一卫应恢复成 URL")
 
     CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=openai_official,haibao,heweiyi,right_code`n")
     CodexProfileWriteText(root "\secrets\right_code\auth.json", "{bad json")
