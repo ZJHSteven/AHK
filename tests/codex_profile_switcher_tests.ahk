@@ -83,23 +83,33 @@ CodexProfileCreateFixture(root, liveDir) {
 
     manifest := "
     (
-[haibao]
-display_name=海豹云-天才程序员
-auth_path=secrets\haibao\auth.json
-config_path=secrets\haibao\config.toml
-template_model_provider=OpenAI
-template_provider_section_name=OpenAI
-template_provider_base_url=http://198.18.1.191
-template_provider_wire_api=responses
-template_provider_requires_openai_auth=true
-
 [openai_official]
 display_name=OpenAI Official
 auth_path=secrets\openai_official\auth.json
 config_path=secrets\openai_official\config.toml
 template_model_provider=
 template_provider_section_name=OpenAI
-template_provider_base_url=http://198.18.1.191
+template_provider_base_url=https://code.rpgame.net
+template_provider_wire_api=responses
+template_provider_requires_openai_auth=true
+
+[haibao]
+display_name=海豹云-天才程序员
+auth_path=secrets\haibao\auth.json
+config_path=secrets\haibao\config.toml
+template_model_provider=OpenAI
+template_provider_section_name=OpenAI
+template_provider_base_url=http://42.192.94.176:5002
+template_provider_wire_api=responses
+template_provider_requires_openai_auth=true
+
+[heweiyi]
+display_name=何一卫
+auth_path=secrets\heweiyi\auth.json
+config_path=secrets\heweiyi\config.toml
+template_model_provider=OpenAI
+template_provider_section_name=OpenAI
+template_provider_base_url=https://ai.websee.top
 template_provider_wire_api=responses
 template_provider_requires_openai_auth=true
 
@@ -109,22 +119,12 @@ auth_path=secrets\right_code\auth.json
 config_path=secrets\right_code\config.toml
 template_model_provider=OpenAI
 template_provider_section_name=OpenAI
-template_provider_base_url=http://198.18.1.191
-template_provider_wire_api=responses
-template_provider_requires_openai_auth=true
-
-[heweiyi]
-display_name=何意味
-auth_path=secrets\heweiyi\auth.json
-config_path=secrets\heweiyi\config.toml
-template_model_provider=OpenAI
-template_provider_section_name=OpenAI
-template_provider_base_url=http://198.18.1.191
+template_provider_base_url=https://ai.websee.top
 template_provider_wire_api=responses
 template_provider_requires_openai_auth=true
     )"
     CodexProfileWriteText(root "\profiles.ini", manifest)
-    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=haibao,openai_official,right_code,heweiyi`n")
+    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=openai_official,haibao,heweiyi,right_code`n")
 
     CodexProfileWriteText(root "\secrets\haibao\auth.json", "{`"OPENAI_API_KEY`":`"haibao-key`"}")
     CodexProfileWriteText(root "\secrets\haibao\config.toml", "model_provider = `"OpenAI`"`nmodel = `"gpt-test`"`n")
@@ -144,10 +144,11 @@ template_provider_requires_openai_auth=true
 CodexProfileTestManifestParse(root) {
     profiles := CodexProfilesLoadManifest(root)
     CodexProfileAssertEqual(profiles.Length, 4, "应解析四套预设")
-    CodexProfileAssertEqual(profiles[1]["id"], "haibao", "第一套 id")
-    CodexProfileAssertEqual(profiles[1]["displayName"], "海豹云-天才程序员", "第一套中文显示名")
-    CodexProfileAssertTrue(InStr(profiles[2]["authPath"], "openai_official\auth.json"), "第二套 auth 路径")
-    CodexProfileAssertEqual(profiles[4]["id"], "heweiyi", "第四套 id")
+    CodexProfileAssertEqual(profiles[1]["id"], "openai_official", "第一套 id")
+    CodexProfileAssertEqual(profiles[2]["displayName"], "海豹云-天才程序员", "第二套中文显示名")
+    CodexProfileAssertTrue(InStr(profiles[1]["authPath"], "openai_official\auth.json"), "第一套 auth 路径")
+    CodexProfileAssertEqual(profiles[3]["displayName"], "何一卫", "第三套中文显示名")
+    CodexProfileAssertEqual(profiles[4]["id"], "right_code", "第四套 id")
 }
 
 CodexProfileTestConfiguredDetection(root) {
@@ -242,7 +243,7 @@ model_reasoning_effort = "high"
 [model_providers]
 [model_providers.OpenAI]
 name = "OpenAI"
-base_url = "http://198.18.1.191"
+base_url = "http://42.192.94.176:5002"
 wire_api = "responses"
 requires_openai_auth = true
 
@@ -263,7 +264,7 @@ model = "gpt-old-official"
 [model_providers]
 [model_providers.OpenAI]
 name = "OpenAI"
-base_url = "http://198.18.1.191"
+base_url = "https://code.rpgame.net"
 wire_api = "responses"
 requires_openai_auth = true
 
@@ -286,7 +287,7 @@ model = "gpt-old-right-code"
 [model_providers]
 [model_providers.OpenAI]
 name = "OpenAI"
-base_url = "http://198.18.1.191"
+base_url = "https://ai.websee.top"
 wire_api = "responses"
 requires_openai_auth = true
 
@@ -309,7 +310,7 @@ model = "gpt-old-heweiyi"
 [model_providers]
 [model_providers.OpenAI]
 name = "OpenAI"
-base_url = "http://198.18.1.191"
+base_url = "https://ai.websee.top"
 wire_api = "responses"
 requires_openai_auth = true
 
@@ -323,7 +324,7 @@ source = '\\?\C:\Users\ZJHSteven\.codex\.tmp\bundled-marketplaces\openai-bundled
 enabled = true
     )"
 
-    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=1`nmember_ids=haibao,openai_official,right_code,heweiyi`n")
+    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=1`nmember_ids=openai_official,haibao,heweiyi,right_code`n")
     CodexProfileWriteText(root "\secrets\haibao\config.toml", sharedSourceConfig)
     CodexProfileWriteText(root "\secrets\openai_official\config.toml", officialBefore)
     CodexProfileWriteText(root "\secrets\right_code\auth.json", "{`"OPENAI_API_KEY`":`"right-code-key`"}")
@@ -343,26 +344,29 @@ enabled = true
     quotedSharedModel := "model = " Chr(34) "gpt-shared" Chr(34)
     quotedSharedUpdatedAt := "last_updated = " Chr(34) "2026-06-07T01:02:03Z" Chr(34)
     quotedOpenAIProvider := "model_provider = " Chr(34) "OpenAI" Chr(34)
-    quotedOpenAIBaseUrl := "base_url = " Chr(34) "http://198.18.1.191" Chr(34)
+    quotedOfficialBaseUrl := "base_url = " Chr(34) "https://code.rpgame.net" Chr(34)
+    quotedHaibaoBaseUrl := "base_url = " Chr(34) "http://42.192.94.176:5002" Chr(34)
+    quotedTransitBaseUrl := "base_url = " Chr(34) "https://ai.websee.top" Chr(34)
 
     CodexProfileAssertTrue(InStr(officialAfter, quotedSharedModel), "Official 应同步公共 model")
     CodexProfileAssertTrue(InStr(officialAfter, quotedSharedUpdatedAt), "Official 应同步公共 marketplace 时间戳")
     CodexProfileAssertFalse(InStr(officialAfter, quotedOpenAIProvider), "Official 不应保留顶层 provider")
     CodexProfileAssertTrue(InStr(officialAfter, "[model_providers.OpenAI]"), "Official 应改写成 OpenAI provider section")
+    CodexProfileAssertTrue(InStr(officialAfter, quotedOfficialBaseUrl), "Official 应保留自己的 URL")
 
     CodexProfileAssertTrue(InStr(haibaoAfter, quotedOpenAIProvider), "海豹云应保留 OpenAI 顶层 provider")
-    CodexProfileAssertTrue(InStr(haibaoAfter, quotedOpenAIBaseUrl), "海豹云应改写成统一的 OpenAI base_url")
+    CodexProfileAssertTrue(InStr(haibaoAfter, quotedHaibaoBaseUrl), "海豹云应使用自己的 IP 地址")
     CodexProfileAssertTrue(InStr(haibaoAfter, "enabled = false"), "海豹云应同步公共 plugin 开关")
 
     CodexProfileAssertTrue(InStr(rightCodeAfter, quotedOpenAIProvider), "RC 应改写成 OpenAI 顶层 provider")
     CodexProfileAssertTrue(InStr(rightCodeAfter, "[model_providers.OpenAI]"), "RC 应改写成 OpenAI provider section")
-    CodexProfileAssertTrue(InStr(rightCodeAfter, quotedOpenAIBaseUrl), "RC 应使用统一的 OpenAI base_url")
+    CodexProfileAssertTrue(InStr(rightCodeAfter, quotedTransitBaseUrl), "RC 应恢复成 URL")
     CodexProfileAssertFalse(InStr(rightCodeAfter, "disable_response_storage = true"), "RC 的旧私有差异应被公共模板抹平")
     CodexProfileAssertTrue(InStr(heweiyiAfter, quotedOpenAIProvider), "何意味应改写成 OpenAI 顶层 provider")
     CodexProfileAssertTrue(InStr(heweiyiAfter, quotedSharedModel), "何意味应同步公共 model")
-    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedOpenAIBaseUrl), "何意味应使用统一的 OpenAI base_url")
+    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedTransitBaseUrl), "何意味应恢复成 URL")
 
-    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=haibao,openai_official,right_code,heweiyi`n")
+    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=openai_official,haibao,heweiyi,right_code`n")
     CodexProfileWriteText(root "\secrets\right_code\auth.json", "{bad json")
 }
 
