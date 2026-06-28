@@ -73,6 +73,7 @@
 
 ### 执行结果
 - 已完成：`ChatGptChromeFindManagedWindowByHeuristic()` 不再只靠标题含 `ChatGPT`；现已引入“topmost + app 标题形态 + 历史矩形接近度”的综合候选评分，并额外偏向“具体会话名窗口”而不是泛化的 `ChatGPT` 首页标题。
+- 已完成：新增“单实例守卫 + 重复实例收敛”逻辑；只要还能找到任何一个像受管浮窗的候选，后续就绝不再 `Run --app=...` 新窗，若现场已经误开出多个候选，则会自动收敛到首选实例，其余实例尝试关闭，失败时再隐藏兜底。
 - 已完成：`Alt+Space` 的切换语义已调整为“只要当前受管窗可见，就直接收起”；不再要求先激活再按第二次。
 - 已完成：新增启动防抖与互斥锁，避免连续快按或上一轮尚未等到窗口时重复 `Run --app=...`。
 - 已完成：`WinShow/WinMove/WinActivate/WinSetAlwaysOnTop` 等路径已补竞态保护；若外部 Chrome 窗口在操作过程中失效，脚本会清理受管状态并安全返回，不再直接抛 `Target window not found`。
