@@ -131,7 +131,7 @@ ChatGptChromeHandleExistingWindow(hwnd, settings) {
     state := ChatGptChromeReadState()
     ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, state)
 
-    ; 正常同桌面切换时，完全不走虚拟桌面 helper。
+    ; 正常同桌面切换时，完全不走任何额外跨桌面桥接逻辑。
     ; 只有窗口被 Shell cloak、很像“留在别的虚拟桌面上”时，
     ; 才进入较慢的跨桌面补救路径。
     if ChatGptChromeWindowNeedsDesktopRecall(hwnd) {
