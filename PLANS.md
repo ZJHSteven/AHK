@@ -81,6 +81,26 @@
 - 已验证：真实冒烟已确认 AHK 包装器调用虚拟桌面 helper 成功，当前前台窗口返回 `ok=1`、`output=1`，说明“当前桌面判断”这条官方接口链路可用。
 - 已验证：`tests/chatgpt_chrome_window_tests.ahk` 已增至 48 项并全部通过；`tests/hotkey_help_tests.ahk` 10 项通过；`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过；`tests/sandbox_bridge_tests.ahk` 11 项通过；`tests/codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 也通过。
 
+## 2026-06-28 ChatGPT 浮窗回归排障：热键变慢与跨桌面仍误开
+
+### 背景
+- 用户最新现场反馈明确指出两件事没有解决：
+  - `Alt+Space` 现在明显“慢半拍”，不像上一轮那样立即响应。
+  - 切换虚拟桌面后，依然会误开新的 ChatGPT 实例。
+- 结合当前代码检查，已经能直接看到两个高风险点：
+  - `ChatGptChromeToggleWindow()` 现在在热键主路径上无条件调用 `ChatGptChromeEnsureWindowOnCurrentVirtualDesktop()`，而该函数会同步拉起 PowerShell helper，并现场编译 C#，这是明显的慢路径。
+  - 一旦 `ChatGptChromeEnsureWindowOnCurrentVirtualDesktop()` 返回 `false`，主流程会立刻 `ChatGptChromeForgetManagedWindow()`，后续就可能误判为“当前没有实例”并再次 `Run` 新窗。
+
+### 修复步骤
+1. 把“虚拟桌面判断/搬运”从每次热键必走，改成只在确实疑似“窗口在别的虚拟桌面”时才触发，恢复同桌面场景下的快速响应。
+2. 去掉“helper 失败就忘掉旧 hwnd 并继续新开”的错误分支；受管窗口只要句柄还活着，就不允许因为跨桌面搬运失败而降级成新实例。
+3. 增加更便宜的本地判定函数，先用同步成本很低的窗口状态判断是否需要进入跨桌面补救路径，避免每次都跑 PowerShell。
+4. 补自动化测试覆盖：
+   - 热路径不会默认依赖慢 helper；
+   - 跨桌面补救失败时不会清空现有受管实例；
+   - 发起新启动前，已有可用 hwnd 时仍会拒绝重复开窗。
+5. 再跑 ChatGPT 模块测试、热键帮助测试、主脚本 `/Validate` 与现有相关回归，确认本轮没有把原有单实例语义打坏。
+
 ## 2026-06-23 Codex 中转预设统一改名为 OpenAI 并新增“何意味”
 
 ### 背景
