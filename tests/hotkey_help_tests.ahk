@@ -7,6 +7,7 @@
 
 #Include ..\modules\utils.ahk
 #Include ..\modules\codex_profile_switcher.ahk
+#Include ..\modules\chatgpt_chrome_window.ahk
 #Include ..\modules\hotkey_help.ahk
 
 global g_TestPassCount := 0

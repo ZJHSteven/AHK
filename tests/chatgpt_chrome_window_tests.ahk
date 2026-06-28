@@ -33,6 +33,7 @@ ChatGptChromeRunAllTests() {
         ChatGptChromeTestBuildAppCommand()
         ChatGptChromeTestCenteredRect()
         ChatGptChromeTestNormalizeRectClampsToWorkArea()
+        ChatGptChromeTestIsWindowMinimizedHandlesInvalidHwnd()
         ChatGptChromeTestResolveTargetRectIgnoresSavedRectWhenModeChanged()
         ChatGptChromeTestReadSettingsFallsBackToDefaults(root)
         ChatGptChromeTestReadSettingsRespectsConfig(root)
@@ -124,6 +125,11 @@ ChatGptChromeTestNormalizeRectClampsToWorkArea() {
     ChatGptChromeAssertTrue(rect["y"] >= workArea["top"], "归一化后 Y 不应越过上边界")
     ChatGptChromeAssertTrue(rect["x"] + rect["w"] <= workArea["right"], "归一化后右边界应留在工作区内")
     ChatGptChromeAssertTrue(rect["y"] + rect["h"] <= workArea["bottom"], "归一化后下边界应留在工作区内")
+}
+
+ChatGptChromeTestIsWindowMinimizedHandlesInvalidHwnd() {
+    result := ChatGptChromeIsWindowMinimized(3738822)
+    ChatGptChromeAssertTrue(!result, "失效 hwnd 不应再抛错，而应安全返回 false")
 }
 
 ChatGptChromeTestReadSettingsFallsBackToDefaults(root) {
