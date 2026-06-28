@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('is-current', 'move-to-current')]
+    [ValidateSet("is-current", "move-to-current")]
     [string]$Mode,
 
     [Parameter(Mandatory = $true)]
@@ -9,7 +9,7 @@ param(
     [long]$AnchorHwnd = 0
 )
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = "Stop"
 
 Add-Type @"
 using System;
@@ -49,7 +49,7 @@ function Assert-HResult {
     )
 
     if ($HResult -ne 0) {
-        $message = "{0} 失败，HRESULT=0x{1:X8}" -f $Operation, ($HResult -band 0xFFFFFFFF)
+        $message = "{0} failed, HRESULT=0x{1:X8}" -f $Operation, ($HResult -band 0xFFFFFFFF)
         throw $message
     }
 }
@@ -58,32 +58,32 @@ $manager = [VirtualDesktopBridge]::CreateManager()
 $targetPtr = [IntPtr]::new($TargetHwnd)
 
 switch ($Mode) {
-    'is-current' {
+    "is-current" {
         $onCurrent = $false
         $hr = $manager.IsWindowOnCurrentVirtualDesktop($targetPtr, [ref]$onCurrent)
-        Assert-HResult $hr 'IsWindowOnCurrentVirtualDesktop'
+        Assert-HResult $hr "IsWindowOnCurrentVirtualDesktop"
         if ($onCurrent) {
-            Write-Output '1'
+            Write-Output "1"
         } else {
-            Write-Output '0'
+            Write-Output "0"
         }
         exit 0
     }
 
-    'move-to-current' {
+    "move-to-current" {
         if ($AnchorHwnd -le 0) {
-            throw 'move-to-current 需要有效的 AnchorHwnd。'
+            throw "move-to-current requires a valid AnchorHwnd."
         }
 
         $anchorPtr = [IntPtr]::new($AnchorHwnd)
         $desktopId = [Guid]::Empty
         $hr = $manager.GetWindowDesktopId($anchorPtr, [ref]$desktopId)
-        Assert-HResult $hr 'GetWindowDesktopId'
+        Assert-HResult $hr "GetWindowDesktopId"
 
         $hr = $manager.MoveWindowToDesktop($targetPtr, [ref]$desktopId)
-        Assert-HResult $hr 'MoveWindowToDesktop'
+        Assert-HResult $hr "MoveWindowToDesktop"
 
-        Write-Output '1'
+        Write-Output "1"
         exit 0
     }
 }
