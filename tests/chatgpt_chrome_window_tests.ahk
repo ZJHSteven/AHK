@@ -35,6 +35,7 @@ ChatGptChromeRunAllTests() {
         ChatGptChromeTestNormalizeRectClampsToWorkArea()
         ChatGptChromeTestIsWindowMinimizedHandlesInvalidHwnd()
         ChatGptChromeTestResolveTargetRectIgnoresSavedRectWhenModeChanged()
+        ChatGptChromeTestResolveTargetRectIgnoresSavedRectWhenPolicyChanged()
         ChatGptChromeTestReadSettingsFallsBackToDefaults(root)
         ChatGptChromeTestReadSettingsRespectsConfig(root)
     } finally {
@@ -188,10 +189,32 @@ ChatGptChromeTestResolveTargetRectIgnoresSavedRectWhenModeChanged() {
         "w", 1600,
         "h", 1000,
         "hasRect", true,
-        "savedWindowMode", "window"
+        "savedWindowMode", "window",
+        "rectPolicyVersion", g_ChatGptChromeStateRectPolicyVersion
     )
     rect := ChatGptChromeResolveTargetRect(settings, state)
 
     ChatGptChromeAssertEqual(rect["w"], 540, "模式切换后不应继续沿用旧的大宽度")
     ChatGptChromeAssertEqual(rect["h"], 760, "模式切换后不应继续沿用旧的大高度")
+}
+
+ChatGptChromeTestResolveTargetRectIgnoresSavedRectWhenPolicyChanged() {
+    settings := Map(
+        "defaultWidth", 540,
+        "defaultHeight", 760,
+        "windowMode", "app"
+    )
+    state := Map(
+        "x", 10,
+        "y", 10,
+        "w", 1600,
+        "h", 1000,
+        "hasRect", true,
+        "savedWindowMode", "app",
+        "rectPolicyVersion", g_ChatGptChromeStateRectPolicyVersion - 1
+    )
+    rect := ChatGptChromeResolveTargetRect(settings, state)
+
+    ChatGptChromeAssertEqual(rect["w"], 540, "小窗策略版本变化后不应继续沿用旧大宽度")
+    ChatGptChromeAssertEqual(rect["h"], 760, "小窗策略版本变化后不应继续沿用旧大高度")
 }

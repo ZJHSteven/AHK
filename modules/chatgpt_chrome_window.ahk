@@ -25,6 +25,7 @@
 
 global g_ChatGptChromeTrackIntervalMs := 800
 global g_ChatGptChromeLastSavedRectSignature := ""
+global g_ChatGptChromeStateRectPolicyVersion := 2
 
 ; 模块初始化。
 ; 入参：无。
@@ -296,7 +297,7 @@ ChatGptChromeDetectChromePath() {
 
 ; 读取本地状态。
 ; 入参：可选 root。
-; 出参：Map，包含 lastHwnd/x/y/w/h/hasRect/savedWindowMode。
+; 出参：Map，包含 lastHwnd/x/y/w/h/hasRect/savedWindowMode/rectPolicyVersion。
 ChatGptChromeReadState(root := "") {
     statePath := ChatGptChromeStatePath(root)
     lastHwnd := FileExist(statePath) ? IniRead(statePath, "window", "last_hwnd", "") : ""
@@ -305,6 +306,7 @@ ChatGptChromeReadState(root := "") {
     w := FileExist(statePath) ? IniRead(statePath, "window", "w", "") : ""
     h := FileExist(statePath) ? IniRead(statePath, "window", "h", "") : ""
     savedWindowMode := FileExist(statePath) ? IniRead(statePath, "window", "window_mode", "") : ""
+    rectPolicyVersion := FileExist(statePath) ? IniRead(statePath, "window", "rect_policy_version", "") : ""
 
     hasRect := RegExMatch(x, "^-?\d+$")
         && RegExMatch(y, "^-?\d+$")
@@ -318,7 +320,8 @@ ChatGptChromeReadState(root := "") {
         "w", hasRect ? Integer(w) : 0,
         "h", hasRect ? Integer(h) : 0,
         "hasRect", hasRect,
-        "savedWindowMode", Trim(savedWindowMode, " `t`r`n")
+        "savedWindowMode", Trim(savedWindowMode, " `t`r`n"),
+        "rectPolicyVersion", RegExMatch(rectPolicyVersion, "^\d+$") ? Integer(rectPolicyVersion) : 0
     )
 }
 
@@ -334,6 +337,7 @@ ChatGptChromeWriteState(state, root := "") {
     IniWrite(state["w"], statePath, "window", "w")
     IniWrite(state["h"], statePath, "window", "h")
     IniWrite(state.Has("savedWindowMode") ? state["savedWindowMode"] : "", statePath, "window", "window_mode")
+    IniWrite(state.Has("rectPolicyVersion") ? state["rectPolicyVersion"] : g_ChatGptChromeStateRectPolicyVersion, statePath, "window", "rect_policy_version")
 }
 
 ; 清空“当前受管窗口”的句柄记忆，但保留位置/大小。
@@ -573,7 +577,9 @@ ChatGptChromeWaitForNewChromeWindow(beforeSet, timeoutMs) {
 ; 2) 若没有，则根据鼠标所在显示器工作区做一个居中的默认矩形；
 ; 3) 最后再统一做边界收敛，避免窗口完全飞出屏幕。
 ChatGptChromeResolveTargetRect(settings, state) {
-    if (state["hasRect"] && state["savedWindowMode"] = settings["windowMode"]) {
+    if (state["hasRect"]
+        && state["savedWindowMode"] = settings["windowMode"]
+        && state["rectPolicyVersion"] = g_ChatGptChromeStateRectPolicyVersion) {
         return ChatGptChromeNormalizeRect(Map(
             "x", state["x"],
             "y", state["y"],
@@ -617,7 +623,8 @@ ChatGptChromeSaveWindowPlacement(hwnd, root := "", settings := "") {
         "y", y,
         "w", w,
         "h", h,
-        "savedWindowMode", IsObject(settings) ? settings["windowMode"] : ChatGptChromeReadState(root)["savedWindowMode"]
+        "savedWindowMode", IsObject(settings) ? settings["windowMode"] : ChatGptChromeReadState(root)["savedWindowMode"],
+        "rectPolicyVersion", g_ChatGptChromeStateRectPolicyVersion
     )
     signature := x "|" y "|" w "|" h "|" hwnd
     if (signature = g_ChatGptChromeLastSavedRectSignature) {
@@ -710,6 +717,9 @@ ChatGptChromeComputeCenteredRect(left, top, right, bottom, desiredWidth, desired
 ; 说明：
 ; - 宽高至少保留 320x240，防止状态文件意外写入过小值。
 ; - 若历史矩形中心点已经不在任何当前显示器工作区里，会自动回退鼠标所在屏。
+; - 只有当状态文件里的 `rect_policy_version` 与当前代码一致时，
+;   旧矩形才会继续被信任；这样当我们改变“小窗策略”时，
+;   可以一次性淘汰历史上的不合理旧尺寸。
 ChatGptChromeNormalizeRect(rect) {
     workArea := ChatGptChromeGetWorkAreaForRect(rect)
     areaWidth := workArea["right"] - workArea["left"]
