@@ -77,6 +77,8 @@
 - 已完成：`Alt+Space` 的切换语义已调整为“只要当前受管窗可见，就直接收起”；不再要求先激活再按第二次。
 - 已完成：新增启动防抖与互斥锁，避免连续快按或上一轮尚未等到窗口时重复 `Run --app=...`。
 - 已完成：`WinShow/WinMove/WinActivate/WinSetAlwaysOnTop` 等路径已补竞态保护；若外部 Chrome 窗口在操作过程中失效，脚本会清理受管状态并安全返回，不再直接抛 `Target window not found`。
+- 已完成：新增 `tools/virtual_desktop_helper.ps1`，基于 Windows 官方公开的 `IVirtualDesktopManager` 把“窗口是否在当前虚拟桌面”和“把窗口搬到当前虚拟桌面”封装成可复用 helper，并接入 `ChatGptChromeEnsureWindowOnCurrentVirtualDesktop()`。
+- 已验证：真实冒烟已确认 AHK 包装器调用虚拟桌面 helper 成功，当前前台窗口返回 `ok=1`、`output=1`，说明“当前桌面判断”这条官方接口链路可用。
 - 已验证：`tests/chatgpt_chrome_window_tests.ahk` 已增至 48 项并全部通过；`tests/hotkey_help_tests.ahk` 10 项通过；`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过；`tests/sandbox_bridge_tests.ahk` 11 项通过；`tests/codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 也通过。
 
 ## 2026-06-23 Codex 中转预设统一改名为 OpenAI 并新增“何意味”

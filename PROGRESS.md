@@ -4,6 +4,7 @@
 - 已定位：用户截图里“旧小窗标题是 `Quest 3 快速游戏推荐`、新大窗标题是 `ChatGPT`”这组现象，根因不是默认值再次变大，而是旧窗标题已经变成会话名，未命中早期那条“标题含 `ChatGPT` 才算受管窗口”的脆弱识别规则，导致脚本误判为“当前没有浮窗”并再次 `Run --app=...`。
 - 已完成：ChatGPT 浮窗的单实例识别现已不再只依赖标题含 `ChatGPT`；新逻辑会综合“Chrome 顶层窗口 + topmost 样式 + app 标题形态 + 历史矩形接近度”挑选候选，并额外偏向“具体会话名窗口”而不是泛化首页标题。
 - 已完成：ChatGPT 浮窗现在按“永远只允许一个实例存在”执行。只要还能找到任何一个受管候选，脚本就不会再次 `Run --app=...`；若现场已经遗留多个候选，则会自动收敛到一个首选实例，其余实例优先尝试关闭，关闭失败再隐藏兜底。
+- 已完成：ChatGPT 浮窗已接入 Windows 官方公开的虚拟桌面接口 `IVirtualDesktopManager`。当受管窗还活着、但位于别的虚拟桌面时，`Alt+Space` 现在会优先尝试把这个同一实例搬到当前桌面，而不是直接新开第二个实例。
 - 已完成：`Alt+Space` 的切换语义已改成“只要当前受管窗可见，就直接收起；不可见或最小化时才恢复”。因此之前那种“第一次先聚焦，第二次才收起”的行为，不再是当前逻辑预期。
 - 已完成：新增启动防抖与互斥锁；如果一轮 `Alt+Space` 还在等待 Chrome app 窗口出现，或你在很短时间里连续触发热键，脚本会直接忽略重复启动请求，避免再开出第二个/第三个窗口。
 - 已完成：`ChatGptChromeApplyWindowProtections()` 与恢复流程已补竞态保护；像 `WinSetAlwaysOnTop(1, \"ahk_id ...\")` 这种在窗口瞬间失效时的路径，现在会安全返回并清理状态，而不是再把异常直接抛到界面上。
@@ -14,6 +15,7 @@
 - 已完成：为兼容历史上已经写入本机状态文件的大尺寸矩形，现已新增 `rect_policy_version` 迁移逻辑。旧状态若没有当前策略版本，即使 `window_mode` 已是 `app`，也会自动回退到新的 `540x760` 默认小窗，而不会继续沿用旧大窗。
 - 已验证：`modules/chatgpt_chrome_window.ahk` 已兼容 UTF-8 BOM 配置文件；即使 `config/chatgpt_chrome_window.ini` 被编辑器保存成 BOM 版本，也能正常读取 `url / chrome_path / profile_directory / window_mode / startup_timeout_ms / default_width / default_height / always_on_top`。
 - 已验证：当前仓库真实配置的非侵入冒烟结果为：`chromePath=C:\Program Files\Google\Chrome\Application\chrome.exe`、`url=https://chatgpt.com/`、`profile=Default`、`mode=app`、`alwaysOnTop=1`、`disableCloseButton=1`；并能正确拼出 `--profile-directory=\"Default\" --app=\"https://chatgpt.com/\" --window-size=540,760 --window-position=1266,532` 这组启动参数。
+- 已验证：`tools/virtual_desktop_helper.ps1` 的真实冒烟已通过：在当前桌面对前台窗口执行 `is-current` 时，AHK 包装器返回 `ok=1`、`output=1`；说明 helper 与 `ChatGptChromeRunVirtualDesktopHelper()` 的调用链路已打通。
 - 现状：Codex 预设现已从“`custom / right_code` 历史命名”收口到统一的 `OpenAI` provider 命名；`海豹云-天才程序员`、`何一卫`、`Right Code` 都会在共享模板回写时生成 `model_provider = "OpenAI"` 与 `[model_providers.OpenAI]`，`OpenAI Official` 仍保持“顶层不显式写 `model_provider`”的保守策略。
 - 已完成：`config/codex_profiles/profiles.ini`、`settings.ini`、本机 secrets 与当前 live `~/.codex/config.toml` 已统一补成四套预设：`openai_official / haibao / heweiyi / right_code`；共享模板成员顺序与托盘菜单顺序也已同步改为 `OpenAI Official -> 海豹云-天才程序员 -> 何一卫 -> Right Code`。
 - 已完成：按用户 2026-06-23 的更正，现已只让海豹云使用 IP `http://42.192.94.176:5002`；`何一卫` 与 `Right Code` 改回 URL `https://ai.websee.top`；`OpenAI Official` 恢复为原先的 URL 方案 `https://code.rpgame.net`，不再误写成统一 IP。
@@ -78,6 +80,8 @@
   原因：用户的真实心智模型是“这就是一个开关”；如果窗口已经可见，即使它当前没焦点，也应一键收起，不该先激活再按第二次。
 - 决策P：当前版本明确按“严格单实例”收口，而不是“先允许多窗、再随机接管一个”。
   原因：在没有设计好多窗口交互模型之前，允许出现第二个但又不能保证每个窗口都受快捷键掌控，只会制造不可预测状态；这比暂时不支持多窗更差。
+- 决策Q：跨虚拟桌面优先做“同一实例跟随/搬运”，而不是“当前桌面看不见就新开一份”。
+  原因：用户已经明确确认这不是多窗口设计需求，而是当前桌面可见性误导了实例判断；因此修复方向应该是保持单实例并移动它，而不是继续扩展多实例分支。
 
 ## 常见坑 / 复现方法
 - 坑1：切换 Codex 配置后，已经打开的 Codex 终端通常不会自动重新读取配置；需要关闭并重新打开终端。
