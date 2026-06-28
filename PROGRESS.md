@@ -2,15 +2,16 @@
 
 ## 当前结论（必须最新）
 - 已定位：用户这次说的“Alt+Space 明显慢半拍”，主因不是 Chrome 本身，而是之前把虚拟桌面 helper 放进了热键主路径。那条链路会同步启动 PowerShell，并用 `Add-Type` 临时编译一段 C# 去调用 Windows 虚拟桌面 COM 接口；对热键小工具来说这条路径太重，确实会拖慢体感。
-- 已完成：`ChatGptChromeToggleWindow()` 的常规热路径已改成“先走本地低成本窗口状态判断”；只有当窗口疑似被 DWM cloak、也就是很像“实例还活着但当前不在这个虚拟桌面”时，才会进入虚拟桌面补救路径。普通同桌面收起/恢复不再默认调用 helper。
+- 已完成：虚拟桌面 helper 已从 ChatGPT 浮窗模块里完全移除；现在 `ChatGptChromeToggleWindow()` 的常规热路径只走本地窗口判断与 hide/show 召回，不再依赖任何 PowerShell + C# 桥接层。
 - 已完成：新增 `ChatGptChromeHandleExistingWindow()` 收口“已有实例”的处理逻辑。现在只要旧 `hwnd` 还活着，就只会被隐藏、恢复、尝试召回，或在失败时明确提示；不会再因为跨桌面接管失败而被 `ForgetManagedWindow()` 清掉，再误判成“没有窗口”去新开第二个实例。
 - 已完成：启动防抖时间窗已从 `1200ms` 收紧到 `250ms`。配合“已有实例优先处理”的新主流程，`Alt+Space` 的常规体感已回到更接近上一轮的快速响应，而不是每次都要先等半拍。
-- 已完成：新增 `ChatGptChromeGetWindowCloakedReason()` 与 `ChatGptChromeShouldAttemptDesktopRecall()`。前者用 DWM 直接查询窗口 cloak 状态，后者把“什么时候才值得走跨桌面补救”收口成纯逻辑门控，避免 helper 再次渗透回常规热路径。
+- 已完成：新增 `ChatGptChromeGetWindowCloakedReason()` 与 `ChatGptChromeShouldAttemptDesktopRecall()`。前者用 DWM 直接查询窗口 cloak 状态，后者把“什么时候才值得走跨桌面补救”收口成纯逻辑门控；当前跨桌面补救统一回退为“已有实例先收起、再在当前桌面重新展开”的简单逻辑。
+- 已完成：修正“误开新实例后尺寸被污染”问题。现在新窗口出现后会先 `WinMove` 到目标矩形，再写回状态文件；不再把 Chrome 自己恢复出来的错误大窗尺寸直接写进 `logs/chatgpt_chrome_window_state.ini`。
 - 已验证：本轮回归后，`tests/chatgpt_chrome_window_tests.ahk` 已增至 53 项并通过，其中新增了跨桌面门控测试；`tests/hotkey_help_tests.ahk` 10 项通过，`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过，`tests/sandbox_bridge_tests.ahk` 11 项通过，`tests/codex_profile_switcher_tests.ahk` 通过，`main.ahk /Validate` 也通过。
 - 已定位：用户截图里“旧小窗标题是 `Quest 3 快速游戏推荐`、新大窗标题是 `ChatGPT`”这组现象，根因不是默认值再次变大，而是旧窗标题已经变成会话名，未命中早期那条“标题含 `ChatGPT` 才算受管窗口”的脆弱识别规则，导致脚本误判为“当前没有浮窗”并再次 `Run --app=...`。
 - 已完成：ChatGPT 浮窗的单实例识别现已不再只依赖标题含 `ChatGPT`；新逻辑会综合“Chrome 顶层窗口 + topmost 样式 + app 标题形态 + 历史矩形接近度”挑选候选，并额外偏向“具体会话名窗口”而不是泛化首页标题。
 - 已完成：ChatGPT 浮窗现在按“永远只允许一个实例存在”执行。只要还能找到任何一个受管候选，脚本就不会再次 `Run --app=...`；若现场已经遗留多个候选，则会自动收敛到一个首选实例，其余实例优先尝试关闭，关闭失败再隐藏兜底。
-- 已完成：ChatGPT 浮窗仍保留 Windows 官方公开的虚拟桌面接口 `IVirtualDesktopManager` 作为“跨桌面兜底补救”能力，但它已不再是每次 `Alt+Space` 的必经路径；现在只在窗口疑似被留在别的虚拟桌面时才会尝试搬运。
+- 已完成：ChatGPT 浮窗当前已不再依赖 Windows 虚拟桌面 COM 桥接能力；跨桌面场景只做“单实例不误开 + hide/show 召回”，不再尝试通过额外 helper 搬运窗口到当前桌面。
 - 已完成：`Alt+Space` 的切换语义已改成“只要当前受管窗可见，就直接收起；不可见或最小化时才恢复”。因此之前那种“第一次先聚焦，第二次才收起”的行为，不再是当前逻辑预期。
 - 已完成：新增启动防抖与互斥锁；如果一轮 `Alt+Space` 还在等待 Chrome app 窗口出现，或你在很短时间里连续触发热键，脚本会直接忽略重复启动请求，避免再开出第二个/第三个窗口。
 - 已完成：`ChatGptChromeApplyWindowProtections()` 与恢复流程已补竞态保护；像 `WinSetAlwaysOnTop(1, \"ahk_id ...\")` 这种在窗口瞬间失效时的路径，现在会安全返回并清理状态，而不是再把异常直接抛到界面上。
@@ -21,7 +22,7 @@
 - 已完成：为兼容历史上已经写入本机状态文件的大尺寸矩形，现已新增 `rect_policy_version` 迁移逻辑。旧状态若没有当前策略版本，即使 `window_mode` 已是 `app`，也会自动回退到新的 `540x760` 默认小窗，而不会继续沿用旧大窗。
 - 已验证：`modules/chatgpt_chrome_window.ahk` 已兼容 UTF-8 BOM 配置文件；即使 `config/chatgpt_chrome_window.ini` 被编辑器保存成 BOM 版本，也能正常读取 `url / chrome_path / profile_directory / window_mode / startup_timeout_ms / default_width / default_height / always_on_top`。
 - 已验证：当前仓库真实配置的非侵入冒烟结果为：`chromePath=C:\Program Files\Google\Chrome\Application\chrome.exe`、`url=https://chatgpt.com/`、`profile=Default`、`mode=app`、`alwaysOnTop=1`、`disableCloseButton=1`；并能正确拼出 `--profile-directory=\"Default\" --app=\"https://chatgpt.com/\" --window-size=540,760 --window-position=1266,532` 这组启动参数。
-- 已验证：`tools/virtual_desktop_helper.ps1` 的真实冒烟已通过：在当前桌面对前台窗口执行 `is-current` 时，AHK 包装器返回 `ok=1`、`output=1`；说明 helper 与 `ChatGptChromeRunVirtualDesktopHelper()` 的调用链路已打通。
+- 已验证：当前仓库真实状态文件 [logs/chatgpt_chrome_window_state.ini](/D:/Workspace/AHK/logs/chatgpt_chrome_window_state.ini) 里记录的最近窗口尺寸为 `735x948`，而静态默认配置 [config/chatgpt_chrome_window.ini](/D:/Workspace/AHK/config/chatgpt_chrome_window.ini) 仍是 `540x760`；这证明用户看到的“大窗”并不是默认值变大，而是误开实例后的窗口尺寸曾被写回状态文件。
 - 现状：Codex 预设现已从“`custom / right_code` 历史命名”收口到统一的 `OpenAI` provider 命名；`海豹云-天才程序员`、`何一卫`、`Right Code` 都会在共享模板回写时生成 `model_provider = "OpenAI"` 与 `[model_providers.OpenAI]`，`OpenAI Official` 仍保持“顶层不显式写 `model_provider`”的保守策略。
 - 已完成：`config/codex_profiles/profiles.ini`、`settings.ini`、本机 secrets 与当前 live `~/.codex/config.toml` 已统一补成四套预设：`openai_official / haibao / heweiyi / right_code`；共享模板成员顺序与托盘菜单顺序也已同步改为 `OpenAI Official -> 海豹云-天才程序员 -> 何一卫 -> Right Code`。
 - 已完成：按用户 2026-06-23 的更正，现已只让海豹云使用 IP `http://42.192.94.176:5002`；`何一卫` 与 `Right Code` 改回 URL `https://ai.websee.top`；`OpenAI Official` 恢复为原先的 URL 方案 `https://code.rpgame.net`，不再误写成统一 IP。
@@ -47,7 +48,7 @@
 - 已验证：Cloudflare 插件缓存当前真实结构是 `skills + .mcp.json`，其中 `.mcp.json` 暴露的就是 `cloudflare-api -> https://mcp.cloudflare.com/mcp`；GitHub 插件缓存真实结构则是 `skills + .app.json`，说明把 `cloudflare/github` plugin 与 plain MCP 同时打开，确实会形成重复入口。
 - 下一步：执行一轮 Codex 预设专项回归：确认 `何一卫` 能在托盘菜单里被识别，确认切到海豹云后 live `config.toml` 仅海豹云使用 `http://42.192.94.176:5002`，而切到 `何一卫 / RC / OpenAI Official` 后会分别恢复各自 URL，再回头继续 Explorer 预览窗格的手工复现。
 - 下一步：如果用户后续确认还要保留真正的多标签页工作流，再把 `config/chatgpt_chrome_window.ini -> window_mode` 从 `app` 切回 `window`，或补一套“app / window 双实例”切换策略。
-- 下一步：让用户现场重点复测两条：1) 同桌面下 `Alt+Space` 是否恢复到立即收起/唤起；2) 窗口留在桌面1、切到桌面2后再按 `Alt+Space` 时，是否还会误开第二个实例。若第二条仍不稳，再继续把 helper 完全降级成“调试工具”而不是功能依赖。
+- 下一步：让用户现场重点复测两条：1) 同桌面下 `Alt+Space` 是否恢复到立即收起/唤起；2) 窗口留在桌面1、切到桌面2后再按 `Alt+Space` 时，是否还会误开第二个实例。若当前记忆尺寸仍表现为大窗，可先从托盘执行“重置 ChatGPT 浮窗位置/大小”，把已污染的 `735x948` 状态清回默认小窗。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：热键帮助采用显式注册表，不从注释自动解析。
