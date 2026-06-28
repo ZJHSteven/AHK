@@ -132,14 +132,15 @@ ChatGptChromeEnsureStateDirectory(root := "") {
 ; 出参：Map，包含 chromePath/url/profileDirectory/windowMode/defaultWidth/defaultHeight/startupTimeoutMs/alwaysOnTop。
 ChatGptChromeReadSettings(root := "") {
     configPath := ChatGptChromeConfigPath(root)
-    chromePath := FileExist(configPath) ? IniRead(configPath, "launch", "chrome_path", "") : ""
-    url := FileExist(configPath) ? IniRead(configPath, "launch", "url", "https://chatgpt.com/") : "https://chatgpt.com/"
-    profileDirectory := FileExist(configPath) ? IniRead(configPath, "launch", "profile_directory", "Default") : "Default"
-    windowMode := FileExist(configPath) ? IniRead(configPath, "launch", "window_mode", "window") : "window"
-    startupTimeoutMs := FileExist(configPath) ? IniRead(configPath, "launch", "startup_timeout_ms", "8000") : "8000"
-    defaultWidth := FileExist(configPath) ? IniRead(configPath, "window", "default_width", "1180") : "1180"
-    defaultHeight := FileExist(configPath) ? IniRead(configPath, "window", "default_height", "820") : "820"
-    alwaysOnTop := FileExist(configPath) ? IniRead(configPath, "window", "always_on_top", "1") : "1"
+    parsedIni := ChatGptChromeReadSimpleIni(configPath)
+    chromePath := ChatGptChromeIniGet(parsedIni, "launch", "chrome_path", "")
+    url := ChatGptChromeIniGet(parsedIni, "launch", "url", "https://chatgpt.com/")
+    profileDirectory := ChatGptChromeIniGet(parsedIni, "launch", "profile_directory", "Default")
+    windowMode := ChatGptChromeIniGet(parsedIni, "launch", "window_mode", "window")
+    startupTimeoutMs := ChatGptChromeIniGet(parsedIni, "launch", "startup_timeout_ms", "8000")
+    defaultWidth := ChatGptChromeIniGet(parsedIni, "window", "default_width", "1180")
+    defaultHeight := ChatGptChromeIniGet(parsedIni, "window", "default_height", "820")
+    alwaysOnTop := ChatGptChromeIniGet(parsedIni, "window", "always_on_top", "1")
 
     chromePath := Trim(chromePath, " `t`r`n")
     if (chromePath = "") {
@@ -156,6 +157,69 @@ ChatGptChromeReadSettings(root := "") {
         "defaultHeight", ChatGptChromeParsePositiveInt(defaultHeight, 820),
         "alwaysOnTop", ChatGptChromeParseIniBool(alwaysOnTop, true)
     )
+}
+
+; 读取一个足够简单、但对 UTF-8 BOM 友好的 INI。
+; 入参：文件路径。
+; 出参：Map(section => Map(key => value))。
+; 说明：
+; - 这里只服务本模块自己的配置文件，不追求通用 INI 全语法。
+; - 支持：
+;   1) [section]
+;   2) key=value
+;   3) 以 ; 或 # 开头的整行注释
+; - 不解析“行尾注释”与更复杂的转义规则，因为当前配置场景不需要。
+ChatGptChromeReadSimpleIni(path) {
+    parsed := Map()
+    if !FileExist(path) {
+        return parsed
+    }
+
+    text := FileRead(path, "UTF-8")
+    if (SubStr(text, 1, 1) = Chr(0xFEFF)) {
+        text := SubStr(text, 2)
+    }
+
+    text := StrReplace(text, "`r", "")
+    currentSection := ""
+    for _, rawLine in StrSplit(text, "`n") {
+        line := Trim(rawLine, " `t")
+        if (line = "") {
+            continue
+        }
+        if (SubStr(line, 1, 1) = ";" || SubStr(line, 1, 1) = "#") {
+            continue
+        }
+        if RegExMatch(line, "^\[(.+)\]$", &sectionMatch) {
+            currentSection := Trim(sectionMatch[1], " `t")
+            if !parsed.Has(currentSection) {
+                parsed[currentSection] := Map()
+            }
+            continue
+        }
+        if (currentSection = "") {
+            continue
+        }
+        if RegExMatch(line, "^(.*?)=(.*)$", &kv) {
+            key := Trim(kv[1], " `t")
+            value := Trim(kv[2], " `t")
+            parsed[currentSection][key] := value
+        }
+    }
+    return parsed
+}
+
+; 从已解析的简单 INI 结构里取值。
+; 入参：parsedIni、section、key、defaultValue。
+; 出参：命中则返回配置值，否则返回默认值。
+ChatGptChromeIniGet(parsedIni, section, key, defaultValue := "") {
+    if !parsedIni.Has(section) {
+        return defaultValue
+    }
+    if !parsedIni[section].Has(key) {
+        return defaultValue
+    }
+    return parsedIni[section][key]
 }
 
 ; 把任意文本归一成允许的窗口模式。
