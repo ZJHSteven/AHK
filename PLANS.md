@@ -101,6 +101,14 @@
    - 发起新启动前，已有可用 hwnd 时仍会拒绝重复开窗。
 5. 再跑 ChatGPT 模块测试、热键帮助测试、主脚本 `/Validate` 与现有相关回归，确认本轮没有把原有单实例语义打坏。
 
+### 执行结果
+- 已完成：`ChatGptChromeToggleWindow()` 的常规热路径已不再默认调用虚拟桌面 helper；当前只在窗口疑似被 DWM cloak、也就是很像“还活着但留在别的虚拟桌面”时，才进入跨桌面补救路径。
+- 已完成：新增 `ChatGptChromeHandleExistingWindow()`，把“已有实例”的恢复/隐藏/跨桌面召回统一收口；旧实例只要句柄还活着，就不会再因为跨桌面失败而被忘掉，更不会继续误开第二个实例。
+- 已完成：新增 `ChatGptChromeGetWindowCloakedReason()` 与 `ChatGptChromeShouldAttemptDesktopRecall()`，先用本地 DWM 低成本判断筛掉绝大多数普通同桌面切换，避免每次热键都去跑 PowerShell + C# helper。
+- 已完成：启动防抖时间窗从 `1200ms` 收紧到 `250ms`；配合“已有 hwnd 优先处理”的主分支，热键体感已回到更接近上一轮的即时响应。
+- 已完成：补充跨桌面门控纯逻辑测试，确保“可见且被 cloak 才尝试跨桌面补救；未 cloak 或不可见时不走慢路径”。
+- 已验证：`tests/chatgpt_chrome_window_tests.ahk` 53 项通过、`tests/hotkey_help_tests.ahk` 10 项通过、`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过、`tests/sandbox_bridge_tests.ahk` 11 项通过、`tests/codex_profile_switcher_tests.ahk` 通过，且 `main.ahk /Validate` 通过。
+
 ## 2026-06-23 Codex 中转预设统一改名为 OpenAI 并新增“何意味”
 
 ### 背景
