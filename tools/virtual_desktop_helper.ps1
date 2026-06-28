@@ -16,58 +16,79 @@ using System;
 using System.Runtime.InteropServices;
 
 [ComImport, Guid("a5cd92ff-29be-454c-8d04-d82879fb3f1b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-public interface IVirtualDesktopManager
+internal interface IVirtualDesktopManager
 {
-    [PreserveSig]
     int IsWindowOnCurrentVirtualDesktop(IntPtr topLevelWindow, out bool onCurrentDesktop);
-
-    [PreserveSig]
     int GetWindowDesktopId(IntPtr topLevelWindow, out Guid desktopId);
-
-    [PreserveSig]
     int MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
 }
 
-public static class VirtualDesktopBridge
+internal static class VirtualDesktopNative
 {
-    public static IVirtualDesktopManager CreateManager()
+    private static readonly Guid ClsidVirtualDesktopManager = new Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a");
+    private static readonly Guid IidVirtualDesktopManager = new Guid("a5cd92ff-29be-454c-8d04-d82879fb3f1b");
+
+    [DllImport("ole32.dll", ExactSpelling = true)]
+    private static extern int CoCreateInstance(
+        [In] ref Guid rclsid,
+        IntPtr pUnkOuter,
+        uint dwClsContext,
+        [In] ref Guid riid,
+        out IntPtr ppv);
+
+    private static IVirtualDesktopManager CreateManager()
     {
-        Type clsid = Type.GetTypeFromCLSID(new Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a"));
-        object instance = Activator.CreateInstance(clsid);
-        IntPtr punk = Marshal.GetIUnknownForObject(instance);
+        IntPtr ppv;
+        int hr = CoCreateInstance(ref ClsidVirtualDesktopManager, IntPtr.Zero, 1u, ref IidVirtualDesktopManager, out ppv);
+        if (hr != 0)
+        {
+            Marshal.ThrowExceptionForHR(hr);
+        }
+
         try
         {
-            return (IVirtualDesktopManager)Marshal.GetTypedObjectForIUnknown(punk, typeof(IVirtualDesktopManager));
+            return (IVirtualDesktopManager)Marshal.GetObjectForIUnknown(ppv);
         }
         finally
         {
-            Marshal.Release(punk);
+            Marshal.Release(ppv);
+        }
+    }
+
+    public static bool IsOnCurrentDesktop(long hwnd)
+    {
+        IVirtualDesktopManager manager = CreateManager();
+        bool onCurrent = false;
+        int hr = manager.IsWindowOnCurrentVirtualDesktop(new IntPtr(hwnd), out onCurrent);
+        if (hr != 0)
+        {
+            Marshal.ThrowExceptionForHR(hr);
+        }
+        return onCurrent;
+    }
+
+    public static void MoveWindowToCurrentDesktop(long targetHwnd, long anchorHwnd)
+    {
+        IVirtualDesktopManager manager = CreateManager();
+        Guid desktopId;
+        int hr = manager.GetWindowDesktopId(new IntPtr(anchorHwnd), out desktopId);
+        if (hr != 0)
+        {
+            Marshal.ThrowExceptionForHR(hr);
+        }
+
+        hr = manager.MoveWindowToDesktop(new IntPtr(targetHwnd), ref desktopId);
+        if (hr != 0)
+        {
+            Marshal.ThrowExceptionForHR(hr);
         }
     }
 }
 "@
 
-function Assert-HResult {
-    param(
-        [int]$HResult,
-        [string]$Operation
-    )
-
-    if ($HResult -ne 0) {
-        $message = "{0} failed, HRESULT=0x{1:X8}" -f $Operation, ($HResult -band 0xFFFFFFFF)
-        throw $message
-    }
-}
-
-$manager = [VirtualDesktopBridge]::CreateManager()
-$targetPtr = [IntPtr]::new($TargetHwnd)
-
 switch ($Mode) {
     "is-current" {
-        $onCurrent = $false
-        $hr = $manager.IsWindowOnCurrentVirtualDesktop($targetPtr, [ref]$onCurrent)
-        Assert-HResult $hr "IsWindowOnCurrentVirtualDesktop"
-        if ($onCurrent) {
+        if ([VirtualDesktopNative]::IsOnCurrentDesktop($TargetHwnd)) {
             Write-Output "1"
         } else {
             Write-Output "0"
@@ -80,14 +101,7 @@ switch ($Mode) {
             throw "move-to-current requires a valid AnchorHwnd."
         }
 
-        $anchorPtr = [IntPtr]::new($AnchorHwnd)
-        $desktopId = [Guid]::Empty
-        $hr = $manager.GetWindowDesktopId($anchorPtr, [ref]$desktopId)
-        Assert-HResult $hr "GetWindowDesktopId"
-
-        $hr = $manager.MoveWindowToDesktop($targetPtr, [ref]$desktopId)
-        Assert-HResult $hr "MoveWindowToDesktop"
-
+        [VirtualDesktopNative]::MoveWindowToCurrentDesktop($TargetHwnd, $AnchorHwnd)
         Write-Output "1"
         exit 0
     }
