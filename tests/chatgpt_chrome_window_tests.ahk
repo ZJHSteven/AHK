@@ -32,6 +32,7 @@ ChatGptChromeRunAllTests() {
         ChatGptChromeTestLaunchDebounce()
         ChatGptChromeTestBrowserTitleHeuristics()
         ChatGptChromeTestVirtualDesktopHelperPath()
+        ChatGptChromeTestDesktopRecallGate()
         ChatGptChromeTestBuildWindowCommand()
         ChatGptChromeTestBuildAppCommand()
         ChatGptChromeTestCenteredRect()
@@ -100,6 +101,13 @@ ChatGptChromeTestBrowserTitleHeuristics() {
 ChatGptChromeTestVirtualDesktopHelperPath() {
     path := ChatGptChromeVirtualDesktopHelperPath("D:\Workspace\AHK")
     ChatGptChromeAssertTrue(InStr(path, "tools\virtual_desktop_helper.ps1") > 0, "虚拟桌面 helper 路径应指向 tools\\virtual_desktop_helper.ps1")
+}
+
+ChatGptChromeTestDesktopRecallGate() {
+    ChatGptChromeAssertTrue(ChatGptChromeShouldAttemptDesktopRecall(true, 1), "可见且 cloak 时应进入跨桌面补救路径")
+    ChatGptChromeAssertTrue(ChatGptChromeShouldAttemptDesktopRecall(true, 2), "可见且被 Shell cloak 时应进入跨桌面补救路径")
+    ChatGptChromeAssertTrue(!ChatGptChromeShouldAttemptDesktopRecall(false, 2), "不可见窗口不应触发跨桌面补救")
+    ChatGptChromeAssertTrue(!ChatGptChromeShouldAttemptDesktopRecall(true, 0), "未 cloak 的可见窗口不应触发跨桌面补救")
 }
 
 ChatGptChromeTestBuildWindowCommand() {
