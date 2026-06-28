@@ -71,6 +71,13 @@
 4. 为 `WinShow/WinMove/WinActivate/WinSetAlwaysOnTop/关闭按钮保护` 等外部窗口操作补竞态保护；一旦窗口中途失效，只清理受管状态，不再弹脚本级异常。
 5. 补测试覆盖“会话标题窗口识别”、“可见即收起”、“启动防抖”和“保护函数遇到失效 hwnd 不抛异常”，再执行完整回归。
 
+### 执行结果
+- 已完成：`ChatGptChromeFindManagedWindowByHeuristic()` 不再只靠标题含 `ChatGPT`；现已引入“topmost + app 标题形态 + 历史矩形接近度”的综合候选评分，并额外偏向“具体会话名窗口”而不是泛化的 `ChatGPT` 首页标题。
+- 已完成：`Alt+Space` 的切换语义已调整为“只要当前受管窗可见，就直接收起”；不再要求先激活再按第二次。
+- 已完成：新增启动防抖与互斥锁，避免连续快按或上一轮尚未等到窗口时重复 `Run --app=...`。
+- 已完成：`WinShow/WinMove/WinActivate/WinSetAlwaysOnTop` 等路径已补竞态保护；若外部 Chrome 窗口在操作过程中失效，脚本会清理受管状态并安全返回，不再直接抛 `Target window not found`。
+- 已验证：`tests/chatgpt_chrome_window_tests.ahk` 已增至 48 项并全部通过；`tests/hotkey_help_tests.ahk` 10 项通过；`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过；`tests/sandbox_bridge_tests.ahk` 11 项通过；`tests/codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 也通过。
+
 ## 2026-06-23 Codex 中转预设统一改名为 OpenAI 并新增“何意味”
 
 ### 背景
