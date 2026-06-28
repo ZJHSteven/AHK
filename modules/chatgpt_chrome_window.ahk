@@ -72,6 +72,8 @@ ChatGptChromeToggleWindow() {
 
     hwnd := ChatGptChromeResolveManagedWindow()
     if hwnd {
+        ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
+
         if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
             ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
             try WinHide("ahk_id " hwnd)
@@ -94,6 +96,7 @@ ChatGptChromeToggleWindow() {
         ChatGptChromeForgetManagedWindow()
         hwnd := ChatGptChromeResolveManagedWindow()
         if hwnd {
+            ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
             if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
                 ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
                 try WinHide("ahk_id " hwnd)
@@ -110,6 +113,28 @@ ChatGptChromeToggleWindow() {
             }
             ChatGptChromeForgetManagedWindow()
         }
+    }
+
+    ; 在真正新开之前再做最后一轮“现存实例”检查。
+    ; 只要还能找到任何一个已受管/像受管的候选，就绝不允许再次 Run 新窗。
+    hwnd := ChatGptChromeResolveManagedWindow()
+    if hwnd {
+        ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
+        if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
+            ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
+            try WinHide("ahk_id " hwnd)
+            catch {
+                ChatGptChromeForgetManagedWindow()
+                return
+            }
+            Toast("已收起 ChatGPT 浮窗")
+            return
+        }
+        if ChatGptChromeShowManagedWindow(hwnd, settings) {
+            Toast("已恢复 ChatGPT 浮窗")
+            return
+        }
+        ChatGptChromeForgetManagedWindow()
     }
 
     if !ChatGptChromeCanStartNewLaunch(A_TickCount, g_ChatGptChromeLastLaunchTick, g_ChatGptChromeLaunchInProgress, g_ChatGptChromeLaunchDebounceMs) {
@@ -426,6 +451,22 @@ ChatGptChromeResolveManagedWindow() {
     return 0
 }
 
+; 返回当前所有“像是本模块在管理的 ChatGPT 浮窗”的候选窗口。
+; 入参：state Map。
+; 出参：HWND 数组。
+; 说明：
+; - 这是单实例守卫的基础：只要这里返回非空，就说明“已经有实例存在”，
+;   后续不应该再次 `Run --app=...`。
+ChatGptChromeGetManagedWindowCandidates(state) {
+    candidates := []
+    for _, hwnd in WinGetList("ahk_exe chrome.exe") {
+        if ChatGptChromeLooksLikeManagedWindow(hwnd, state) {
+            candidates.Push(hwnd)
+        }
+    }
+    return candidates
+}
+
 ; 基于“Chrome 顶层窗口 + 置顶样式 + 标题形态 + 历史矩形接近度”做轻量重识别。
 ; 入参：state Map。
 ; 出参：候选 HWND；找不到返回 0。
@@ -436,16 +477,11 @@ ChatGptChromeResolveManagedWindow() {
 ;   不能只认标题含 `ChatGPT`，因为 app 窗口标题会变成当前会话名，
 ;   例如用户截图中的 `Quest 3 快速游戏推荐`。
 ChatGptChromeFindManagedWindowByHeuristic(state) {
-    candidateCount := 0
+    candidates := ChatGptChromeGetManagedWindowCandidates(state)
     bestHwnd := 0
     bestScore := -2147483648
 
-    for _, hwnd in WinGetList("ahk_exe chrome.exe") {
-        if !ChatGptChromeLooksLikeManagedWindow(hwnd, state) {
-            continue
-        }
-
-        candidateCount += 1
+    for _, hwnd in candidates {
         score := ChatGptChromeScoreManagedWindowCandidate(hwnd, state)
 
         if (score > bestScore) {
@@ -454,13 +490,50 @@ ChatGptChromeFindManagedWindowByHeuristic(state) {
         }
     }
 
-    if (candidateCount = 1) {
+    if (candidates.Length = 1) {
         return bestHwnd
     }
-    if (candidateCount > 1 && state["hasRect"] && bestHwnd) {
+    if (candidates.Length > 1 && bestHwnd) {
         return bestHwnd
     }
     return 0
+}
+
+; 收敛误开的重复实例，只保留首选窗口。
+; 入参：preferredHwnd、settings、state。
+; 出参：无。
+; 说明：
+; - 这是“永远只允许一个实例存在”的执行层保护。
+; - 一旦已经出现多个候选窗口，就不再让它们同时留在桌面上失控存在。
+; - 优先保留 `preferredHwnd`，其余候选先尝试优雅关闭；若失败，再隐藏作为兜底。
+ChatGptChromePruneDuplicateManagedWindows(preferredHwnd, settings, state) {
+    candidates := ChatGptChromeGetManagedWindowCandidates(state)
+    if (candidates.Length <= 1) {
+        return
+    }
+
+    for _, hwnd in candidates {
+        if (hwnd = preferredHwnd) {
+            continue
+        }
+        if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+            continue
+        }
+        try ChatGptChromeSetCloseButtonEnabled(hwnd, true)
+        try WinClose("ahk_id " hwnd)
+        Sleep(120)
+        if ChatGptChromeIsWindowHandleUsable(hwnd) {
+            try PostMessage(0x0112, 0xF060, 0, , "ahk_id " hwnd)
+            Sleep(120)
+        }
+        if ChatGptChromeIsWindowHandleUsable(hwnd) {
+            try WinHide("ahk_id " hwnd)
+        }
+    }
+
+    if ChatGptChromeIsWindowHandleUsable(preferredHwnd) {
+        ChatGptChromeSaveWindowPlacement(preferredHwnd, "", settings)
+    }
 }
 
 ; 判断一个 Chrome 顶层窗口是否“像是”本模块管理的 ChatGPT 窗口。
@@ -738,6 +811,13 @@ ChatGptChromeResolveTargetRect(settings, state) {
     }
 
     workArea := ChatGptChromeGetMouseMonitorWorkArea()
+    return ChatGptChromeBuildDefaultRectFromWorkArea(settings, workArea)
+}
+
+; 基于给定工作区构造默认小窗矩形。
+; 入参：settings、workArea。
+; 出参：Map(x, y, w, h)。
+ChatGptChromeBuildDefaultRectFromWorkArea(settings, workArea) {
     return ChatGptChromeComputeCenteredRect(
         workArea["left"],
         workArea["top"],
@@ -809,6 +889,50 @@ ChatGptChromeTrackManagedWindowPlacement() {
     }
     ChatGptChromeApplyWindowProtections(hwnd, settings)
     ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
+}
+
+; 从托盘菜单重置浮窗位置与大小。
+; 入参：菜单事件参数自动传入，但本函数不使用。
+; 出参：无。
+; 行为：
+; 1) 若当前已有受管窗口：直接把它移动到默认小窗尺寸并保存。
+; 2) 若当前没有受管窗口：清掉旧矩形状态，下次 Alt+Space 会按默认小窗新开或恢复。
+ChatGptChromeResetWindowPlacementFromTray(*) {
+    settings := ChatGptChromeReadSettings()
+    hwnd := ChatGptChromeResolveManagedWindow()
+
+    if hwnd && ChatGptChromeIsWindowHandleUsable(hwnd) {
+        try WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
+        catch {
+            hwnd := 0
+        }
+    }
+
+    if hwnd && ChatGptChromeIsWindowHandleUsable(hwnd) {
+        workArea := ChatGptChromeGetWorkAreaForRect(Map("x", x, "y", y, "w", w, "h", h))
+        rect := ChatGptChromeBuildDefaultRectFromWorkArea(settings, workArea)
+        try {
+            WinMove(rect["x"], rect["y"], rect["w"], rect["h"], "ahk_id " hwnd)
+            ChatGptChromeApplyWindowProtections(hwnd, settings)
+            ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
+            Toast("已重置 ChatGPT 浮窗位置与大小")
+            return
+        } catch {
+            ChatGptChromeForgetManagedWindow()
+        }
+    }
+
+    state := Map(
+        "lastHwnd", 0,
+        "x", 0,
+        "y", 0,
+        "w", 0,
+        "h", 0,
+        "savedWindowMode", settings["windowMode"],
+        "rectPolicyVersion", 0
+    )
+    ChatGptChromeWriteState(state)
+    Toast("已清空 ChatGPT 浮窗位置状态；下次将按默认小窗恢复。")
 }
 
 ; 获取鼠标当前所在显示器的工作区。
