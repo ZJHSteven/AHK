@@ -34,7 +34,15 @@ public static class VirtualDesktopBridge
     {
         Type clsid = Type.GetTypeFromCLSID(new Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a"));
         object instance = Activator.CreateInstance(clsid);
-        return (IVirtualDesktopManager)instance;
+        IntPtr punk = Marshal.GetIUnknownForObject(instance);
+        try
+        {
+            return (IVirtualDesktopManager)Marshal.GetTypedObjectForIUnknown(punk, typeof(IVirtualDesktopManager));
+        }
+        finally
+        {
+            Marshal.Release(punk);
+        }
     }
 }
 "@
