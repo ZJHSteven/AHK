@@ -27,7 +27,7 @@ global g_ChatGptChromeTrackIntervalMs := 800
 global g_ChatGptChromeLastSavedRectSignature := ""
 global g_ChatGptChromeStateRectPolicyVersion := 2
 global g_ChatGptChromeLaunchInProgress := false
-global g_ChatGptChromeLaunchDebounceMs := 1200
+global g_ChatGptChromeLaunchDebounceMs := 250
 global g_ChatGptChromeLastLaunchTick := 0
 
 ; 模块初始化。
@@ -72,52 +72,19 @@ ChatGptChromeToggleWindow() {
 
     hwnd := ChatGptChromeResolveManagedWindow()
     if hwnd {
-        ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
-        if !ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd) {
-            ChatGptChromeForgetManagedWindow()
-            hwnd := ChatGptChromeResolveManagedWindow()
-            if hwnd {
-                ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
-                ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd)
-            }
-        }
-
-        if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
-            ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
-            try WinHide("ahk_id " hwnd)
-            catch {
-                ChatGptChromeForgetManagedWindow()
-                Toast("原浮窗句柄已失效，已清理受管状态。", 2200)
-                return
-            }
-            Toast("已收起 ChatGPT 浮窗")
+        result := ChatGptChromeHandleExistingWindow(hwnd, settings)
+        if (result = "handled") {
             return
         }
 
-        if ChatGptChromeShowManagedWindow(hwnd, settings) {
-            Toast("已恢复 ChatGPT 浮窗")
-            return
-        }
-
-        ; 走到这里说明保存下来的 hwnd 已经在恢复流程中途失效。
-        ; 先清掉受管状态，再尝试走后续的“重新识别 / 必要时新开”路径。
+        ; 只有当旧 hwnd 真失效时，才允许忘掉它并重新识别。
+        ; 这次回归修复的重点，就是不能因为“跨桌面搬运失败”
+        ; 就把仍然活着的旧实例当成不存在，然后误开第二个窗口。
         ChatGptChromeForgetManagedWindow()
         hwnd := ChatGptChromeResolveManagedWindow()
         if hwnd {
-            ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
-            ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd)
-            if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
-                ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
-                try WinHide("ahk_id " hwnd)
-                catch {
-                    ChatGptChromeForgetManagedWindow()
-                    return
-                }
-                Toast("已收起 ChatGPT 浮窗")
-                return
-            }
-            if ChatGptChromeShowManagedWindow(hwnd, settings) {
-                Toast("已恢复 ChatGPT 浮窗")
+            result := ChatGptChromeHandleExistingWindow(hwnd, settings)
+            if (result = "handled") {
                 return
             }
             ChatGptChromeForgetManagedWindow()
@@ -128,20 +95,8 @@ ChatGptChromeToggleWindow() {
     ; 只要还能找到任何一个已受管/像受管的候选，就绝不允许再次 Run 新窗。
     hwnd := ChatGptChromeResolveManagedWindow()
     if hwnd {
-        ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
-        ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd)
-        if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
-            ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
-            try WinHide("ahk_id " hwnd)
-            catch {
-                ChatGptChromeForgetManagedWindow()
-                return
-            }
-            Toast("已收起 ChatGPT 浮窗")
-            return
-        }
-        if ChatGptChromeShowManagedWindow(hwnd, settings) {
-            Toast("已恢复 ChatGPT 浮窗")
+        result := ChatGptChromeHandleExistingWindow(hwnd, settings)
+        if (result = "handled") {
             return
         }
         ChatGptChromeForgetManagedWindow()
@@ -161,6 +116,56 @@ ChatGptChromeToggleWindow() {
     }
 
     Toast("已启动 ChatGPT 浮窗")
+}
+
+; 处理“已经存在的受管窗口”。
+; 入参：hwnd、settings。
+; 出参：
+; - "handled"：本次热键已经完成处理，不应继续走新开分支。
+; - "stale"：这个 hwnd 确实已经失效，可以清掉状态后继续重识别。
+; 说明：
+; 1) 这里把“已有实例”的所有处理都收口到一起，避免主流程里重复写三遍。
+; 2) 这也是本轮回归修复的核心：只要旧实例还活着，就宁可提示“接管失败”，
+;    也绝不允许继续误判成“没窗口”然后新开第二个实例。
+ChatGptChromeHandleExistingWindow(hwnd, settings) {
+    state := ChatGptChromeReadState()
+    ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, state)
+
+    ; 正常同桌面切换时，完全不走虚拟桌面 helper。
+    ; 只有窗口被 Shell cloak、很像“留在别的虚拟桌面上”时，
+    ; 才进入较慢的跨桌面补救路径。
+    if ChatGptChromeWindowNeedsDesktopRecall(hwnd) {
+        if ChatGptChromeRecallWindowToCurrentDesktop(hwnd, settings) {
+            Toast("已恢复 ChatGPT 浮窗")
+            return "handled"
+        }
+        if ChatGptChromeIsWindowHandleUsable(hwnd) {
+            Toast("已找到原 ChatGPT 浮窗，但本次跨桌面接管失败；未再新开实例。", 2800)
+            return "handled"
+        }
+        return "stale"
+    }
+
+    if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
+        ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
+        try WinHide("ahk_id " hwnd)
+        catch {
+            return ChatGptChromeIsWindowHandleUsable(hwnd) ? "handled" : "stale"
+        }
+        Toast("已收起 ChatGPT 浮窗")
+        return "handled"
+    }
+
+    if ChatGptChromeShowManagedWindow(hwnd, settings) {
+        Toast("已恢复 ChatGPT 浮窗")
+        return "handled"
+    }
+
+    if ChatGptChromeIsWindowHandleUsable(hwnd) {
+        Toast("已找到原 ChatGPT 浮窗，但恢复失败；未再新开实例。", 2600)
+        return "handled"
+    }
+    return "stale"
 }
 
 ; 托盘菜单回调包装器。
@@ -663,6 +668,56 @@ ChatGptChromeIsWindowVisible(hwnd) {
     return DllCall("IsWindowVisible", "ptr", hwnd, "int") != 0
 }
 
+; 读取窗口的 DWM cloak 状态。
+; 入参：hwnd。
+; 出参：0 表示未 cloak；非 0 表示被 cloak，并携带原因位掩码。
+; 背景说明：
+; - Windows 官方 `DWMWA_CLOAKED` 属性可告诉我们“窗口当前为什么不可被用户看到”。
+; - 其中 `DWM_CLOAKED_SHELL` 是 Shell 主动 cloak 的情况，
+;   这正是“窗口还活着，但现在不在当前虚拟桌面上”的重要信号。
+; - 这里先走一个成本很低的本地 DWM 查询，只有真出现 cloak 信号时，
+;   才再去调用较慢的 PowerShell 虚拟桌面 helper。
+ChatGptChromeGetWindowCloakedReason(hwnd) {
+    if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+        return 0
+    }
+
+    cloakBuffer := Buffer(4, 0)
+    hr := DllCall(
+        "dwmapi\DwmGetWindowAttribute",
+        "ptr", hwnd,
+        "uint", 14,
+        "ptr", cloakBuffer.Ptr,
+        "uint", cloakBuffer.Size,
+        "int"
+    )
+    if (hr != 0) {
+        return 0
+    }
+    return NumGet(cloakBuffer, 0, "uint")
+}
+
+; 纯逻辑辅助：根据“是否可见 + cloak 原因”判断，
+; 当前这次热键是否有必要进入跨桌面补救路径。
+; 入参：isVisible、cloakReason。
+; 出参：true / false。
+ChatGptChromeShouldAttemptDesktopRecall(isVisible, cloakReason) {
+    return isVisible && (cloakReason != 0)
+}
+
+; 判断当前窗口是否疑似需要“跨虚拟桌面召回”。
+; 入参：hwnd。
+; 出参：true / false。
+ChatGptChromeWindowNeedsDesktopRecall(hwnd) {
+    if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+        return false
+    }
+    return ChatGptChromeShouldAttemptDesktopRecall(
+        ChatGptChromeIsWindowVisible(hwnd),
+        ChatGptChromeGetWindowCloakedReason(hwnd)
+    )
+}
+
 ; 判断窗口是否最小化。
 ; 入参：hwnd。
 ; 出参：true / false。
@@ -837,6 +892,30 @@ ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(targetHwnd) {
 
     result := ChatGptChromeRunVirtualDesktopHelper("move-to-current", targetHwnd, anchorHwnd)
     return result["ok"]
+}
+
+; 尝试把“还活着、但当前不在本桌面的旧窗口”召回到当前桌面。
+; 入参：hwnd、settings。
+; 出参：true=召回成功；false=召回失败。
+; 说明：
+; 1) 首选仍然是官方虚拟桌面 helper，语义最直接。
+; 2) 但即使 helper 失败，也不能忘掉旧实例，更不能转头新开第二个。
+; 3) 用户现场已经证明：同一个窗口在“先收起再唤起”时，可以跨桌面复用。
+;    所以这里补一个 hide/show 兜底，尽量把已有实例重新拉回当前工作流。
+ChatGptChromeRecallWindowToCurrentDesktop(hwnd, settings) {
+    if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+        return false
+    }
+    if ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd) {
+        return ChatGptChromeShowManagedWindow(hwnd, settings)
+    }
+
+    try WinHide("ahk_id " hwnd)
+    catch {
+        return false
+    }
+    Sleep(40)
+    return ChatGptChromeShowManagedWindow(hwnd, settings)
 }
 
 ; 把 HWND 数组转成便于查重的 Map。
