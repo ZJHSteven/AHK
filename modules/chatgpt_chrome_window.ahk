@@ -26,6 +26,9 @@
 global g_ChatGptChromeTrackIntervalMs := 800
 global g_ChatGptChromeLastSavedRectSignature := ""
 global g_ChatGptChromeStateRectPolicyVersion := 2
+global g_ChatGptChromeLaunchInProgress := false
+global g_ChatGptChromeLaunchDebounceMs := 1200
+global g_ChatGptChromeLastLaunchTick := 0
 
 ; 模块初始化。
 ; 入参：无。
@@ -56,6 +59,9 @@ ChatGptChromeWindowInitialize() {
 ;    - 若存在但不在前台：激活并提到最上层。
 ; 3) 若根本找不到：启动一个新的 Chrome 窗口并打开 ChatGPT。
 ChatGptChromeToggleWindow() {
+    global g_ChatGptChromeLaunchInProgress
+    global g_ChatGptChromeLastLaunchTick
+    global g_ChatGptChromeLaunchDebounceMs
     ChatGptChromeWindowInitialize()
     settings := ChatGptChromeReadSettings()
 
@@ -66,25 +72,54 @@ ChatGptChromeToggleWindow() {
 
     hwnd := ChatGptChromeResolveManagedWindow()
     if hwnd {
-        if ChatGptChromeIsWindowMinimized(hwnd) || !ChatGptChromeIsWindowVisible(hwnd) {
-            ChatGptChromeShowManagedWindow(hwnd, settings)
-            Toast("已恢复 ChatGPT 浮窗")
-            return
-        }
-
-        if WinActive("ahk_id " hwnd) {
-            ChatGptChromeSaveWindowPlacement(hwnd)
-            WinHide("ahk_id " hwnd)
+        if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
+            ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
+            try WinHide("ahk_id " hwnd)
+            catch {
+                ChatGptChromeForgetManagedWindow()
+                Toast("原浮窗句柄已失效，已清理受管状态。", 2200)
+                return
+            }
             Toast("已收起 ChatGPT 浮窗")
             return
         }
 
-        ChatGptChromeShowManagedWindow(hwnd, settings)
-        Toast("已唤起 ChatGPT 浮窗")
+        if ChatGptChromeShowManagedWindow(hwnd, settings) {
+            Toast("已恢复 ChatGPT 浮窗")
+            return
+        }
+
+        ; 走到这里说明保存下来的 hwnd 已经在恢复流程中途失效。
+        ; 先清掉受管状态，再尝试走后续的“重新识别 / 必要时新开”路径。
+        ChatGptChromeForgetManagedWindow()
+        hwnd := ChatGptChromeResolveManagedWindow()
+        if hwnd {
+            if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
+                ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
+                try WinHide("ahk_id " hwnd)
+                catch {
+                    ChatGptChromeForgetManagedWindow()
+                    return
+                }
+                Toast("已收起 ChatGPT 浮窗")
+                return
+            }
+            if ChatGptChromeShowManagedWindow(hwnd, settings) {
+                Toast("已恢复 ChatGPT 浮窗")
+                return
+            }
+            ChatGptChromeForgetManagedWindow()
+        }
+    }
+
+    if !ChatGptChromeCanStartNewLaunch(A_TickCount, g_ChatGptChromeLastLaunchTick, g_ChatGptChromeLaunchInProgress, g_ChatGptChromeLaunchDebounceMs) {
         return
     }
 
+    g_ChatGptChromeLaunchInProgress := true
+    g_ChatGptChromeLastLaunchTick := A_TickCount
     launchResult := ChatGptChromeLaunchManagedWindow(settings)
+    g_ChatGptChromeLaunchInProgress := false
     if !launchResult["ok"] {
         Toast(launchResult["message"], 3200)
         return
@@ -247,6 +282,20 @@ ChatGptChromeNormalizeWindowMode(modeText) {
     return (normalized = "app") ? "app" : "window"
 }
 
+; 判断本次是否允许再次启动新窗口。
+; 入参：
+; - currentTick：当前时钟。
+; - lastLaunchTick：上一次发起启动请求的时钟。
+; - launchInProgress：当前是否还在等待上一轮窗口出现。
+; - debounceMs：防抖时间窗。
+; 出参：true=允许；false=应忽略本次重复启动。
+ChatGptChromeCanStartNewLaunch(currentTick, lastLaunchTick, launchInProgress, debounceMs) {
+    if launchInProgress {
+        return false
+    }
+    return (currentTick - lastLaunchTick) >= debounceMs
+}
+
 ; 解析 INI 风格布尔值。
 ; 入参：文本 + 默认值。
 ; 出参：true / false。
@@ -377,34 +426,27 @@ ChatGptChromeResolveManagedWindow() {
     return 0
 }
 
-; 基于“标题里含 ChatGPT + 与历史矩形尽量接近”做轻量重识别。
+; 基于“Chrome 顶层窗口 + 置顶样式 + 标题形态 + 历史矩形接近度”做轻量重识别。
 ; 入参：state Map。
 ; 出参：候选 HWND；找不到返回 0。
 ; 说明：
 ; - 这是启发式，不是强保证。
 ; - 主要用于脚本 Reload 后尽量接管已有窗口，而不是替代主识别机制。
+; - 2026-06-28 追加修正：
+;   不能只认标题含 `ChatGPT`，因为 app 窗口标题会变成当前会话名，
+;   例如用户截图中的 `Quest 3 快速游戏推荐`。
 ChatGptChromeFindManagedWindowByHeuristic(state) {
     candidateCount := 0
     bestHwnd := 0
     bestScore := -2147483648
 
     for _, hwnd in WinGetList("ahk_exe chrome.exe") {
-        title := ""
-        try title := WinGetTitle("ahk_id " hwnd)
-        if !InStr(StrLower(title), "chatgpt") {
+        if !ChatGptChromeLooksLikeManagedWindow(hwnd, state) {
             continue
         }
 
         candidateCount += 1
-        score := 0
-
-        if state["hasRect"] {
-            try WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
-            catch {
-                continue
-            }
-            score := -Abs(x - state["x"]) - Abs(y - state["y"]) - Abs(w - state["w"]) - Abs(h - state["h"])
-        }
+        score := ChatGptChromeScoreManagedWindowCandidate(hwnd, state)
 
         if (score > bestScore) {
             bestScore := score
@@ -419,6 +461,103 @@ ChatGptChromeFindManagedWindowByHeuristic(state) {
         return bestHwnd
     }
     return 0
+}
+
+; 判断一个 Chrome 顶层窗口是否“像是”本模块管理的 ChatGPT 窗口。
+; 入参：hwnd、state。
+; 出参：true / false。
+; 策略：
+; 1) 标题直接含 `ChatGPT` 的窗口优先认为是候选。
+; 2) 当前使用 app 模式时，标题往往会直接变成会话名，不再含 ` - Google Chrome`。
+; 3) 我们自己的窗口会被设成 topmost，因此“Chrome + topmost”是很强的候选信号。
+ChatGptChromeLooksLikeManagedWindow(hwnd, state) {
+    title := ""
+    try title := WinGetTitle("ahk_id " hwnd)
+    catch {
+        return false
+    }
+
+    if (title = "") {
+        return false
+    }
+    if InStr(StrLower(title), "chatgpt") {
+        return true
+    }
+    if ChatGptChromeIsTopmostWindow(hwnd) {
+        return true
+    }
+    if (state["savedWindowMode"] = "app" && !ChatGptChromeLooksLikeRegularBrowserTitle(title)) {
+        return true
+    }
+    return false
+}
+
+; 判断标题是否更像“普通浏览器标签页窗口”。
+; 入参：标题文本。
+; 出参：true / false。
+; 说明：
+; - 普通 Chrome 窗口标题通常包含 ` - Google Chrome` 后缀。
+; - app/PWA 窗口、以及 ChatGPT 会话名窗口往往没有这个后缀。
+ChatGptChromeLooksLikeRegularBrowserTitle(title) {
+    return InStr(title, " - Google Chrome") > 0
+}
+
+; 判断标题是否更像“具体会话名 app 窗口”，而不是泛化的 ChatGPT 首页。
+; 入参：标题文本。
+; 出参：true / false。
+; 说明：
+; - `ChatGPT` 本身是泛化首页标题。
+; - 像 `Quest 3 快速游戏推荐` 这种更像用户真正工作的会话窗。
+ChatGptChromeLooksLikeConversationAppTitle(title) {
+    trimmed := Trim(title, " `t`r`n")
+    if (trimmed = "" || StrLower(trimmed) = "chatgpt") {
+        return false
+    }
+    return !ChatGptChromeLooksLikeRegularBrowserTitle(trimmed)
+}
+
+; 为候选窗口打分，分数越高越优先被接管。
+; 入参：hwnd、state。
+; 出参：整数分数。
+ChatGptChromeScoreManagedWindowCandidate(hwnd, state) {
+    score := 0
+    title := ""
+    try title := WinGetTitle("ahk_id " hwnd)
+    if InStr(StrLower(title), "chatgpt") {
+        score += 1000000
+    }
+    if ChatGptChromeIsTopmostWindow(hwnd) {
+        score += 600000
+    }
+    if ChatGptChromeLooksLikeConversationAppTitle(title) {
+        score += 1200000
+    }
+    if (state["savedWindowMode"] = "app" && !ChatGptChromeLooksLikeRegularBrowserTitle(title)) {
+        score += 300000
+    }
+
+    if state["hasRect"] {
+        try WinGetPos(&x, &y, &w, &h, "ahk_id " hwnd)
+        catch {
+            return score - 99999999
+        }
+        score += -Abs(x - state["x"]) - Abs(y - state["y"]) - Abs(w - state["w"]) - Abs(h - state["h"])
+    }
+    return score
+}
+
+; 判断窗口是否带有 topmost 扩展样式。
+; 入参：hwnd。
+; 出参：true / false。
+ChatGptChromeIsTopmostWindow(hwnd) {
+    if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+        return false
+    }
+    try exStyle := WinGetExStyle("ahk_id " hwnd)
+    catch {
+        return false
+    }
+    return (exStyle & 0x8) != 0
 }
 
 ; 判断 HWND 当前是否还是一个可用窗口。
@@ -461,14 +600,24 @@ ChatGptChromeIsWindowMinimized(hwnd) {
 ; 出参：无。
 ChatGptChromeShowManagedWindow(hwnd, settings) {
     rect := ChatGptChromeResolveTargetRect(settings, ChatGptChromeReadState())
-    WinShow("ahk_id " hwnd)
-    if ChatGptChromeIsWindowMinimized(hwnd) {
-        WinRestore("ahk_id " hwnd)
+    try {
+        WinShow("ahk_id " hwnd)
+        if ChatGptChromeIsWindowMinimized(hwnd) {
+            WinRestore("ahk_id " hwnd)
+        }
+        if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+            return false
+        }
+        WinMove(rect["x"], rect["y"], rect["w"], rect["h"], "ahk_id " hwnd)
+        if !ChatGptChromeApplyWindowProtections(hwnd, settings) {
+            return false
+        }
+        WinActivate("ahk_id " hwnd)
+        ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
+        return true
+    } catch {
+        return false
     }
-    WinMove(rect["x"], rect["y"], rect["w"], rect["h"], "ahk_id " hwnd)
-    ChatGptChromeApplyWindowProtections(hwnd, settings)
-    WinActivate("ahk_id " hwnd)
-    ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
 }
 
 ; 启动一个新的受管 Chrome 窗口。
@@ -760,13 +909,22 @@ ChatGptChromeNormalizeRect(rect) {
 ; - 右上角关闭按钮被禁用后，用户误点 X 时不会把整个 ChatGPT 会话关掉。
 ; - 真正想关闭时，使用 AHK 托盘菜单“彻底关闭 ChatGPT 浮窗”。
 ChatGptChromeApplyWindowProtections(hwnd, settings) {
-    if settings["alwaysOnTop"] {
-        WinSetAlwaysOnTop(1, "ahk_id " hwnd)
+    if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+        return false
     }
-    if settings["disableCloseButton"] {
-        ChatGptChromeSetCloseButtonEnabled(hwnd, false)
-    } else {
-        ChatGptChromeSetCloseButtonEnabled(hwnd, true)
+    try {
+        if settings["alwaysOnTop"] {
+            WinSetAlwaysOnTop(1, "ahk_id " hwnd)
+        }
+        if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+            return false
+        }
+        if settings["disableCloseButton"] {
+            return ChatGptChromeSetCloseButtonEnabled(hwnd, false)
+        }
+        return ChatGptChromeSetCloseButtonEnabled(hwnd, true)
+    } catch {
+        return false
     }
 }
 

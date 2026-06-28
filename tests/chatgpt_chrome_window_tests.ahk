@@ -29,6 +29,8 @@ ChatGptChromeRunAllTests() {
     root := A_Temp "\ahk_chatgpt_chrome_window_tests_" A_TickCount
     try {
         ChatGptChromeTestModeNormalization()
+        ChatGptChromeTestLaunchDebounce()
+        ChatGptChromeTestBrowserTitleHeuristics()
         ChatGptChromeTestBuildWindowCommand()
         ChatGptChromeTestBuildAppCommand()
         ChatGptChromeTestCenteredRect()
@@ -77,6 +79,21 @@ ChatGptChromeTestModeNormalization() {
     ChatGptChromeAssertEqual(ChatGptChromeNormalizeWindowMode("APP"), "app", "模式大小写应被归一化")
     ChatGptChromeAssertEqual(ChatGptChromeNormalizeWindowMode("window"), "window", "window 模式应保留")
     ChatGptChromeAssertEqual(ChatGptChromeNormalizeWindowMode("weird"), "window", "非法模式应回退为 window")
+}
+
+ChatGptChromeTestLaunchDebounce() {
+    ChatGptChromeAssertTrue(ChatGptChromeCanStartNewLaunch(5000, 0, false, 1200), "首次启动请求应允许")
+    ChatGptChromeAssertTrue(!ChatGptChromeCanStartNewLaunch(5500, 5000, false, 1200), "防抖窗口内不应重复启动")
+    ChatGptChromeAssertTrue(!ChatGptChromeCanStartNewLaunch(7000, 5000, true, 1200), "上一轮启动未完成时不应重复启动")
+    ChatGptChromeAssertTrue(ChatGptChromeCanStartNewLaunch(7001, 5000, false, 1200), "超过防抖时间后应允许再次启动")
+}
+
+ChatGptChromeTestBrowserTitleHeuristics() {
+    ChatGptChromeAssertTrue(ChatGptChromeLooksLikeRegularBrowserTitle("测试页面 - Google Chrome"), "普通浏览器标题应识别为 regular browser")
+    ChatGptChromeAssertTrue(!ChatGptChromeLooksLikeRegularBrowserTitle("Quest 3 快速游戏推荐"), "会话名标题不应被误判成普通浏览器")
+    ChatGptChromeAssertTrue(!ChatGptChromeLooksLikeRegularBrowserTitle("ChatGPT"), "app 标题不应被误判成普通浏览器")
+    ChatGptChromeAssertTrue(ChatGptChromeLooksLikeConversationAppTitle("Quest 3 快速游戏推荐"), "具体会话名应识别为 conversation app title")
+    ChatGptChromeAssertTrue(!ChatGptChromeLooksLikeConversationAppTitle("ChatGPT"), "泛化 ChatGPT 标题不应识别为 conversation app title")
 }
 
 ChatGptChromeTestBuildWindowCommand() {
