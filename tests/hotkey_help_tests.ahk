@@ -22,6 +22,7 @@ try {
 
 HotkeyHelpRunAllTests() {
     HotkeyHelpTestContainsCodexMenuHotkey()
+    HotkeyHelpTestContainsChatGptFloatingWindowHotkey()
     HotkeyHelpTestDoesNotListDisabledLlcModule()
     HotkeyHelpTestDisplayTextHasReadableGroups()
     HotkeyHelpTestTrayInitializationCanRun()
@@ -47,6 +48,12 @@ HotkeyHelpTestContainsCodexMenuHotkey() {
     text := HotkeyHelpBuildDisplayText()
     HotkeyHelpAssertTrue(InStr(text, "Ctrl+Alt+F12"), "应展示 Codex 预设热键")
     HotkeyHelpAssertTrue(InStr(text, "Codex 预设菜单"), "应说明 Codex 预设用途")
+}
+
+HotkeyHelpTestContainsChatGptFloatingWindowHotkey() {
+    text := HotkeyHelpBuildDisplayText()
+    HotkeyHelpAssertTrue(InStr(text, "Alt+Space"), "应展示 ChatGPT 浮窗热键")
+    HotkeyHelpAssertTrue(InStr(text, "ChatGPT Chrome 浮窗"), "应说明 ChatGPT 浮窗用途")
 }
 
 HotkeyHelpTestDoesNotListDisabledLlcModule() {
