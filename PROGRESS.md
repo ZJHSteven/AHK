@@ -1,10 +1,16 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 已定位：用户这次说的“Alt+Space 明显慢半拍”，主因不是 Chrome 本身，而是之前把虚拟桌面 helper 放进了热键主路径。那条链路会同步启动 PowerShell，并用 `Add-Type` 临时编译一段 C# 去调用 Windows 虚拟桌面 COM 接口；对热键小工具来说这条路径太重，确实会拖慢体感。
+- 已完成：`ChatGptChromeToggleWindow()` 的常规热路径已改成“先走本地低成本窗口状态判断”；只有当窗口疑似被 DWM cloak、也就是很像“实例还活着但当前不在这个虚拟桌面”时，才会进入虚拟桌面补救路径。普通同桌面收起/恢复不再默认调用 helper。
+- 已完成：新增 `ChatGptChromeHandleExistingWindow()` 收口“已有实例”的处理逻辑。现在只要旧 `hwnd` 还活着，就只会被隐藏、恢复、尝试召回，或在失败时明确提示；不会再因为跨桌面接管失败而被 `ForgetManagedWindow()` 清掉，再误判成“没有窗口”去新开第二个实例。
+- 已完成：启动防抖时间窗已从 `1200ms` 收紧到 `250ms`。配合“已有实例优先处理”的新主流程，`Alt+Space` 的常规体感已回到更接近上一轮的快速响应，而不是每次都要先等半拍。
+- 已完成：新增 `ChatGptChromeGetWindowCloakedReason()` 与 `ChatGptChromeShouldAttemptDesktopRecall()`。前者用 DWM 直接查询窗口 cloak 状态，后者把“什么时候才值得走跨桌面补救”收口成纯逻辑门控，避免 helper 再次渗透回常规热路径。
+- 已验证：本轮回归后，`tests/chatgpt_chrome_window_tests.ahk` 已增至 53 项并通过，其中新增了跨桌面门控测试；`tests/hotkey_help_tests.ahk` 10 项通过，`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过，`tests/sandbox_bridge_tests.ahk` 11 项通过，`tests/codex_profile_switcher_tests.ahk` 通过，`main.ahk /Validate` 也通过。
 - 已定位：用户截图里“旧小窗标题是 `Quest 3 快速游戏推荐`、新大窗标题是 `ChatGPT`”这组现象，根因不是默认值再次变大，而是旧窗标题已经变成会话名，未命中早期那条“标题含 `ChatGPT` 才算受管窗口”的脆弱识别规则，导致脚本误判为“当前没有浮窗”并再次 `Run --app=...`。
 - 已完成：ChatGPT 浮窗的单实例识别现已不再只依赖标题含 `ChatGPT`；新逻辑会综合“Chrome 顶层窗口 + topmost 样式 + app 标题形态 + 历史矩形接近度”挑选候选，并额外偏向“具体会话名窗口”而不是泛化首页标题。
 - 已完成：ChatGPT 浮窗现在按“永远只允许一个实例存在”执行。只要还能找到任何一个受管候选，脚本就不会再次 `Run --app=...`；若现场已经遗留多个候选，则会自动收敛到一个首选实例，其余实例优先尝试关闭，关闭失败再隐藏兜底。
-- 已完成：ChatGPT 浮窗已接入 Windows 官方公开的虚拟桌面接口 `IVirtualDesktopManager`。当受管窗还活着、但位于别的虚拟桌面时，`Alt+Space` 现在会优先尝试把这个同一实例搬到当前桌面，而不是直接新开第二个实例。
+- 已完成：ChatGPT 浮窗仍保留 Windows 官方公开的虚拟桌面接口 `IVirtualDesktopManager` 作为“跨桌面兜底补救”能力，但它已不再是每次 `Alt+Space` 的必经路径；现在只在窗口疑似被留在别的虚拟桌面时才会尝试搬运。
 - 已完成：`Alt+Space` 的切换语义已改成“只要当前受管窗可见，就直接收起；不可见或最小化时才恢复”。因此之前那种“第一次先聚焦，第二次才收起”的行为，不再是当前逻辑预期。
 - 已完成：新增启动防抖与互斥锁；如果一轮 `Alt+Space` 还在等待 Chrome app 窗口出现，或你在很短时间里连续触发热键，脚本会直接忽略重复启动请求，避免再开出第二个/第三个窗口。
 - 已完成：`ChatGptChromeApplyWindowProtections()` 与恢复流程已补竞态保护；像 `WinSetAlwaysOnTop(1, \"ahk_id ...\")` 这种在窗口瞬间失效时的路径，现在会安全返回并清理状态，而不是再把异常直接抛到界面上。
@@ -41,7 +47,7 @@
 - 已验证：Cloudflare 插件缓存当前真实结构是 `skills + .mcp.json`，其中 `.mcp.json` 暴露的就是 `cloudflare-api -> https://mcp.cloudflare.com/mcp`；GitHub 插件缓存真实结构则是 `skills + .app.json`，说明把 `cloudflare/github` plugin 与 plain MCP 同时打开，确实会形成重复入口。
 - 下一步：执行一轮 Codex 预设专项回归：确认 `何一卫` 能在托盘菜单里被识别，确认切到海豹云后 live `config.toml` 仅海豹云使用 `http://42.192.94.176:5002`，而切到 `何一卫 / RC / OpenAI Official` 后会分别恢复各自 URL，再回头继续 Explorer 预览窗格的手工复现。
 - 下一步：如果用户后续确认还要保留真正的多标签页工作流，再把 `config/chatgpt_chrome_window.ini -> window_mode` 从 `app` 切回 `window`，或补一套“app / window 双实例”切换策略。
-- 下一步：若用户后续明确要求“切换虚拟桌面后，Alt+Space 必须自动把同一个浮窗带过来，或自动切到它所在桌面”，则需要单独接入 Windows `IVirtualDesktopManager` 路径做桌面归属判断；这会是下一轮独立功能，不属于本轮“单实例修复”的完成范围。
+- 下一步：让用户现场重点复测两条：1) 同桌面下 `Alt+Space` 是否恢复到立即收起/唤起；2) 窗口留在桌面1、切到桌面2后再按 `Alt+Space` 时，是否还会误开第二个实例。若第二条仍不稳，再继续把 helper 完全降级成“调试工具”而不是功能依赖。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：热键帮助采用显式注册表，不从注释自动解析。
