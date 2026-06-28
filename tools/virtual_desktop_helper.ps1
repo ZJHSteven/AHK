@@ -6,7 +6,9 @@ param(
     [Parameter(Mandatory = $true)]
     [long]$TargetHwnd,
 
-    [long]$AnchorHwnd = 0
+    [long]$AnchorHwnd = 0,
+
+    [string]$OutputPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -87,11 +89,11 @@ public static class VirtualDesktopNative
 
 switch ($Mode) {
     "is-current" {
-        if ([VirtualDesktopNative]::IsOnCurrentDesktop($TargetHwnd)) {
-            Write-Output "1"
-        } else {
-            Write-Output "0"
+        $result = if ([VirtualDesktopNative]::IsOnCurrentDesktop($TargetHwnd)) { "1" } else { "0" }
+        if ($OutputPath -ne "") {
+            [System.IO.File]::WriteAllText($OutputPath, $result, [System.Text.Encoding]::UTF8)
         }
+        Write-Output $result
         exit 0
     }
 
@@ -101,6 +103,9 @@ switch ($Mode) {
         }
 
         [VirtualDesktopNative]::MoveWindowToCurrentDesktop($TargetHwnd, $AnchorHwnd)
+        if ($OutputPath -ne "") {
+            [System.IO.File]::WriteAllText($OutputPath, "1", [System.Text.Encoding]::UTF8)
+        }
         Write-Output "1"
         exit 0
     }

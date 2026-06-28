@@ -782,9 +782,9 @@ ChatGptChromeRunVirtualDesktopHelper(mode, targetHwnd, anchorHwnd := 0) {
         . " -Mode " ChatGptChromeQuoteStandaloneArg(mode)
         . " -TargetHwnd " targetHwnd
         . " -AnchorHwnd " anchorHwnd
-        . " > " ChatGptChromeQuoteStandaloneArg(outputPath) " 2>&1"
+        . " -OutputPath " ChatGptChromeQuoteStandaloneArg(outputPath)
 
-    exitCode := RunWait(A_ComSpec " /C " command, , "Hide")
+    exitCode := RunWait(command, , "Hide")
     output := FileExist(outputPath) ? Trim(FileRead(outputPath, "UTF-8"), " `t`r`n") : ""
     try FileDelete(outputPath)
 
