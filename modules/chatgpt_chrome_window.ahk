@@ -73,6 +73,14 @@ ChatGptChromeToggleWindow() {
     hwnd := ChatGptChromeResolveManagedWindow()
     if hwnd {
         ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
+        if !ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd) {
+            ChatGptChromeForgetManagedWindow()
+            hwnd := ChatGptChromeResolveManagedWindow()
+            if hwnd {
+                ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
+                ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd)
+            }
+        }
 
         if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
             ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
@@ -97,6 +105,7 @@ ChatGptChromeToggleWindow() {
         hwnd := ChatGptChromeResolveManagedWindow()
         if hwnd {
             ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
+            ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd)
             if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
                 ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
                 try WinHide("ahk_id " hwnd)
@@ -120,6 +129,7 @@ ChatGptChromeToggleWindow() {
     hwnd := ChatGptChromeResolveManagedWindow()
     if hwnd {
         ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, ChatGptChromeReadState())
+        ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd)
         if ChatGptChromeIsWindowVisible(hwnd) && !ChatGptChromeIsWindowMinimized(hwnd) {
             ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
             try WinHide("ahk_id " hwnd)
@@ -746,6 +756,87 @@ ChatGptChromeQuoteStandaloneArg(value) {
 ; 出参：例如 "Default" 或 "https://chatgpt.com/"。
 ChatGptChromeQuoteSwitchValue(value) {
     return Chr(34) StrReplace(value, Chr(34), Chr(92) Chr(34)) Chr(34)
+}
+
+; 返回虚拟桌面 PowerShell helper 路径。
+; 入参：可选 root。
+; 出参：绝对路径。
+ChatGptChromeVirtualDesktopHelperPath(root := "") {
+    return ChatGptChromeProjectRoot(root) "\tools\virtual_desktop_helper.ps1"
+}
+
+; 运行虚拟桌面 helper。
+; 入参：mode、targetHwnd、anchorHwnd。
+; 出参：Map("ok", bool, "output", 文本, "message", 文本)。
+ChatGptChromeRunVirtualDesktopHelper(mode, targetHwnd, anchorHwnd := 0) {
+    helperPath := ChatGptChromeVirtualDesktopHelperPath()
+    if !FileExist(helperPath) {
+        return Map("ok", false, "output", "", "message", "缺少虚拟桌面 helper：" helperPath)
+    }
+
+    psPath := A_WinDir "\System32\WindowsPowerShell\v1.0\powershell.exe"
+    outputPath := A_Temp "\ahk_chatgpt_vd_" A_TickCount ".txt"
+    command := ChatGptChromeQuoteStandaloneArg(psPath)
+        . " -NoProfile -ExecutionPolicy Bypass -File "
+        . ChatGptChromeQuoteStandaloneArg(helperPath)
+        . " -Mode " ChatGptChromeQuoteStandaloneArg(mode)
+        . " -TargetHwnd " targetHwnd
+        . " -AnchorHwnd " anchorHwnd
+        . " > " ChatGptChromeQuoteStandaloneArg(outputPath) " 2>&1"
+
+    exitCode := RunWait(A_ComSpec " /C " command, , "Hide")
+    output := FileExist(outputPath) ? Trim(FileRead(outputPath, "UTF-8"), " `t`r`n") : ""
+    try FileDelete(outputPath)
+
+    if (exitCode = 0) {
+        return Map("ok", true, "output", output, "message", "")
+    }
+    if (output = "") {
+        output := "虚拟桌面 helper 失败，退出码 " exitCode
+    }
+    return Map("ok", false, "output", output, "message", output)
+}
+
+; 判断窗口当前是否位于当前虚拟桌面。
+; 入参：hwnd。
+; 出参：true / false。
+; 说明：
+; - 若 helper 调用失败，这里保守返回 true，避免把 helper 故障误判成“窗口一定不在当前桌面”。
+ChatGptChromeIsWindowOnCurrentVirtualDesktop(hwnd) {
+    if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+        return false
+    }
+
+    result := ChatGptChromeRunVirtualDesktopHelper("is-current", hwnd, 0)
+    if !result["ok"] {
+        return true
+    }
+    return result["output"] = "1"
+}
+
+; 尝试把窗口移动到当前虚拟桌面。
+; 入参：targetHwnd。
+; 出参：true=已经在当前桌面或移动成功；false=移动失败。
+; 说明：
+; - 当前桌面的 GUID 通过“当前前台窗口”的桌面 GUID 间接获得。
+ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(targetHwnd) {
+    if !ChatGptChromeIsWindowHandleUsable(targetHwnd) {
+        return false
+    }
+    if ChatGptChromeIsWindowOnCurrentVirtualDesktop(targetHwnd) {
+        return true
+    }
+
+    try anchorHwnd := WinGetID("A")
+    catch {
+        anchorHwnd := 0
+    }
+    if !(anchorHwnd is Integer) || (anchorHwnd <= 0) {
+        return false
+    }
+
+    result := ChatGptChromeRunVirtualDesktopHelper("move-to-current", targetHwnd, anchorHwnd)
+    return result["ok"]
 }
 
 ; 把 HWND 数组转成便于查重的 Map。

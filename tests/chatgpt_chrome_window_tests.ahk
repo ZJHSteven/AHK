@@ -31,6 +31,7 @@ ChatGptChromeRunAllTests() {
         ChatGptChromeTestModeNormalization()
         ChatGptChromeTestLaunchDebounce()
         ChatGptChromeTestBrowserTitleHeuristics()
+        ChatGptChromeTestVirtualDesktopHelperPath()
         ChatGptChromeTestBuildWindowCommand()
         ChatGptChromeTestBuildAppCommand()
         ChatGptChromeTestCenteredRect()
@@ -94,6 +95,11 @@ ChatGptChromeTestBrowserTitleHeuristics() {
     ChatGptChromeAssertTrue(!ChatGptChromeLooksLikeRegularBrowserTitle("ChatGPT"), "app 标题不应被误判成普通浏览器")
     ChatGptChromeAssertTrue(ChatGptChromeLooksLikeConversationAppTitle("Quest 3 快速游戏推荐"), "具体会话名应识别为 conversation app title")
     ChatGptChromeAssertTrue(!ChatGptChromeLooksLikeConversationAppTitle("ChatGPT"), "泛化 ChatGPT 标题不应识别为 conversation app title")
+}
+
+ChatGptChromeTestVirtualDesktopHelperPath() {
+    path := ChatGptChromeVirtualDesktopHelperPath("D:\Workspace\AHK")
+    ChatGptChromeAssertTrue(InStr(path, "tools\virtual_desktop_helper.ps1") > 0, "虚拟桌面 helper 路径应指向 tools\\virtual_desktop_helper.ps1")
 }
 
 ChatGptChromeTestBuildWindowCommand() {
