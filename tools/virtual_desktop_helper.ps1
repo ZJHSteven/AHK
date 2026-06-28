@@ -25,9 +25,6 @@ internal interface IVirtualDesktopManager
 
 internal static class VirtualDesktopNative
 {
-    private static readonly Guid ClsidVirtualDesktopManager = new Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a");
-    private static readonly Guid IidVirtualDesktopManager = new Guid("a5cd92ff-29be-454c-8d04-d82879fb3f1b");
-
     [DllImport("ole32.dll", ExactSpelling = true)]
     private static extern int CoCreateInstance(
         [In] ref Guid rclsid,
@@ -38,8 +35,10 @@ internal static class VirtualDesktopNative
 
     private static IVirtualDesktopManager CreateManager()
     {
+        Guid clsidVirtualDesktopManager = new Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a");
+        Guid iidVirtualDesktopManager = new Guid("a5cd92ff-29be-454c-8d04-d82879fb3f1b");
         IntPtr ppv;
-        int hr = CoCreateInstance(ref ClsidVirtualDesktopManager, IntPtr.Zero, 1u, ref IidVirtualDesktopManager, out ppv);
+        int hr = CoCreateInstance(ref clsidVirtualDesktopManager, IntPtr.Zero, 1u, ref iidVirtualDesktopManager, out ppv);
         if (hr != 0)
         {
             Marshal.ThrowExceptionForHR(hr);
