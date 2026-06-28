@@ -33,6 +33,7 @@ HotkeyHelpGetEntries() {
     HotkeyHelpAdd(entries, "沙盒中转", "Ctrl+Alt+V", "单文件时粘贴到微信/QQ；多文件时二次触发清理；无任务时手动清理残留。")
 
     HotkeyHelpAdd(entries, "窗口 / 系统", "Left Ctrl+Space", "发送 Enter；但 Ctrl+X+Space 的 Spotify 分支优先。")
+    HotkeyHelpAdd(entries, "窗口 / 系统", "Alt+Space", "切换 ChatGPT Chrome 浮窗：首次启动，之后可在唤起/激活/收起之间切换，并记住上次位置与大小。")
     HotkeyHelpAdd(entries, "窗口 / 系统", "Left Alt 抬起", "触发现有窗口切换辅助逻辑。")
     HotkeyHelpAdd(entries, "窗口 / 系统", "Win+Alt+D", "尝试结束 WPS / Kingsoft 相关进程。")
 

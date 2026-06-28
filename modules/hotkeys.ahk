@@ -4,6 +4,7 @@
 #Include ctrlx_spotify_combo.ahk
 #Include chat_message_cleaner.ahk
 #Include markdown_reference_link_inliner.ahk
+#Include chatgpt_chrome_window.ahk
 ; ============================================
 ; 你的热键集合（保持与你原脚本的功能一致）
 ; ============================================
@@ -108,6 +109,19 @@ $^+c:: {
 ; 3) 真正切换逻辑在 codex_profile_switcher.ahk 中，热键层只保留入口。
 ^!F12:: {
     CodexProfilesShowTrayMenu()
+}
+
+; Alt + Space -> 切换 ChatGPT Chrome 浮窗
+; 说明：
+; 1) 默认使用 Chrome 的 Default Profile，不新建独立 Profile。
+; 2) 第一次按下时会启动一个新的 ChatGPT Chrome 窗口。
+; 3) 之后再次按下：
+;    - 若窗口正在前台：保存位置后隐藏；
+;    - 若窗口被隐藏或最小化：恢复并激活；
+;    - 若窗口存在但不在前台：提到最前并保持置顶。
+; 4) 默认走普通 window 模式，保留多标签页；若想改成更像 App 的外观，可改 config\chatgpt_chrome_window.ini。
+!Space:: {
+    ChatGptChromeToggleWindow()
 }
 
 ; 鼠标前进键 → 复制
