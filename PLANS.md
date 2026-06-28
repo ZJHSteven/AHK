@@ -51,6 +51,26 @@
 - 已验证：`tests/chatgpt_chrome_window_tests.ahk`、`tests/hotkey_help_tests.ahk`、`tests/markdown_reference_link_inliner_tests.ahk`、`tests/sandbox_bridge_tests.ahk`、`tests/codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 全部通过。
 - 已验证：针对仓库内真实 `config/chatgpt_chrome_window.ini` 的非侵入冒烟已输出实际启动命令，确认当前默认行为为：`Default` Profile + `app` 模式 + `540x760` + `disable_close_button=1`；旧状态文件当前为 `rect_policy_version=0` 时，会解析成新的小窗矩形而不是继续沿用旧大窗。
 
+## 2026-06-28 ChatGPT 浮窗单实例与切换语义修复
+
+### 背景
+- 新问题1：用户手测时同时出现两个 ChatGPT app 窗口，一个标题是会话名 `Quest 3 快速游戏推荐`，另一个标题是通用 `ChatGPT`，说明旧窗没有被当前逻辑重新接管，反而又新开了一个。
+- 新问题2：当前切换语义是“可见但不在前台时，先激活；再次按才隐藏”。用户的直觉是“Alt+Space 就是开/关”，不希望先聚焦再按第二次才收起。
+- 新问题3：跨虚拟桌面时，旧窗有时没有被正确接管，随后 Alt+Space 又新开一扇窗，最终演变成不可控多实例。
+- 新问题4：`WinSetAlwaysOnTop` 仍存在窗口瞬间失效时的竞态报错，说明保护函数还缺少充足的 try/catch 与二次有效性判断。
+
+### 根因判断
+- 现有回收逻辑在 `last_hwnd` 失效后，会退回到“标题含 `ChatGPT`”的启发式识别。
+- 但 ChatGPT app 窗口的标题会变成当前会话名，因此像 `Quest 3 快速游戏推荐` 这样的旧小窗不会命中该规则。
+- 一旦旧窗未被认出，脚本就会误判为“当前没有受管浮窗”，继续 `Run --app=...` 新开一扇窗。
+
+### 实现步骤
+1. 收紧单实例识别逻辑：不再只靠标题含 `ChatGPT`，而是优先结合“Chrome 顶层窗口 + 置顶样式 + 历史矩形接近度 + 已保存句柄”做候选筛选。
+2. 增加启动防抖/互斥：当一次 `Alt+Space` 还在“等待新窗出现”阶段时，短时间内忽略新的启动请求，防止手速快造成重复 `Run`。
+3. 修改切换语义：只要受管窗当前可见，就直接收起；不再要求“先聚焦，再按第二次才隐藏”。
+4. 为 `WinShow/WinMove/WinActivate/WinSetAlwaysOnTop/关闭按钮保护` 等外部窗口操作补竞态保护；一旦窗口中途失效，只清理受管状态，不再弹脚本级异常。
+5. 补测试覆盖“会话标题窗口识别”、“可见即收起”、“启动防抖”和“保护函数遇到失效 hwnd 不抛异常”，再执行完整回归。
+
 ## 2026-06-23 Codex 中转预设统一改名为 OpenAI 并新增“何意味”
 
 ### 背景
