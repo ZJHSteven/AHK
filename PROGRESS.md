@@ -1,11 +1,12 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
-- 已完成：新增 “ChatGPT Chrome 浮窗” 能力，使用 `Alt+Space` 控制；默认复用 Chrome `Default` Profile，不新建独立 Profile，默认以普通 `window` 模式启动 `https://chatgpt.com/`，并保持 `AlwaysOnTop`。
-- 已完成：浮窗首次启动使用 `config/chatgpt_chrome_window.ini` 里的默认尺寸（当前为 `1180x820`）；后续用户手动拖动/缩放后的窗口位置与大小会持续写入 `logs/chatgpt_chrome_window_state.ini`，因此再次唤起时会尽量回到上次位置。
-- 已完成：为兼容用户“既想像桌面小窗，又想保留多个标签页”的需求，本轮决策先默认走普通 Chrome 窗口模式；`app` 模式仅保留为配置项 `window_mode=app`，暂不默认启用。
+- 已完成：新增 “ChatGPT Chrome 浮窗” 能力，使用 `Alt+Space` 控制；默认复用 Chrome `Default` Profile，不新建独立 Profile，当前默认以 `app` 模式启动 `https://chatgpt.com/`，并保持 `AlwaysOnTop`。
+- 已完成：浮窗首次启动使用 `config/chatgpt_chrome_window.ini` 里的默认小窗尺寸（当前为 `540x760`）；后续用户手动拖动/缩放后的窗口位置与大小会持续写入 `logs/chatgpt_chrome_window_state.ini`，因此再次唤起时会尽量回到上次位置。
+- 已完成：右上角关闭按钮当前默认禁用；误点 X 不会再直接关闭并刷新整个 ChatGPT 页面。若要真正关闭，现已统一改为从 AHK 托盘菜单点击“彻底关闭 ChatGPT 浮窗”。
+- 已完成：为兼容历史上已经写入本机状态文件的大尺寸矩形，现已新增 `rect_policy_version` 迁移逻辑。旧状态若没有当前策略版本，即使 `window_mode` 已是 `app`，也会自动回退到新的 `540x760` 默认小窗，而不会继续沿用旧大窗。
 - 已验证：`modules/chatgpt_chrome_window.ahk` 已兼容 UTF-8 BOM 配置文件；即使 `config/chatgpt_chrome_window.ini` 被编辑器保存成 BOM 版本，也能正常读取 `url / chrome_path / profile_directory / window_mode / startup_timeout_ms / default_width / default_height / always_on_top`。
-- 已验证：当前仓库真实配置的非侵入冒烟结果为：`chromePath=C:\Program Files\Google\Chrome\Application\chrome.exe`、`url=https://chatgpt.com/`、`profile=Default`、`mode=window`、`alwaysOnTop=1`，并能正确拼出 `--profile-directory=\"Default\" --new-window --window-size=1180,820 --window-position=370,110` 这组启动参数。
+- 已验证：当前仓库真实配置的非侵入冒烟结果为：`chromePath=C:\Program Files\Google\Chrome\Application\chrome.exe`、`url=https://chatgpt.com/`、`profile=Default`、`mode=app`、`alwaysOnTop=1`、`disableCloseButton=1`；并能正确拼出 `--profile-directory=\"Default\" --app=\"https://chatgpt.com/\" --window-size=540,760 --window-position=1266,532` 这组启动参数。
 - 现状：Codex 预设现已从“`custom / right_code` 历史命名”收口到统一的 `OpenAI` provider 命名；`海豹云-天才程序员`、`何一卫`、`Right Code` 都会在共享模板回写时生成 `model_provider = "OpenAI"` 与 `[model_providers.OpenAI]`，`OpenAI Official` 仍保持“顶层不显式写 `model_provider`”的保守策略。
 - 已完成：`config/codex_profiles/profiles.ini`、`settings.ini`、本机 secrets 与当前 live `~/.codex/config.toml` 已统一补成四套预设：`openai_official / haibao / heweiyi / right_code`；共享模板成员顺序与托盘菜单顺序也已同步改为 `OpenAI Official -> 海豹云-天才程序员 -> 何一卫 -> Right Code`。
 - 已完成：按用户 2026-06-23 的更正，现已只让海豹云使用 IP `http://42.192.94.176:5002`；`何一卫` 与 `Right Code` 改回 URL `https://ai.websee.top`；`OpenAI Official` 恢复为原先的 URL 方案 `https://code.rpgame.net`，不再误写成统一 IP。
@@ -30,7 +31,7 @@
 - 已验证：本轮已补“auth refresh 后仍能识别当前预设”、“切换前先回写来源整文件”与“config 已漂移时仍可依赖 last_switch 回写来源整文件”三条自动化用例；落地后需要再次执行 `tests\codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 做回归确认。
 - 已验证：Cloudflare 插件缓存当前真实结构是 `skills + .mcp.json`，其中 `.mcp.json` 暴露的就是 `cloudflare-api -> https://mcp.cloudflare.com/mcp`；GitHub 插件缓存真实结构则是 `skills + .app.json`，说明把 `cloudflare/github` plugin 与 plain MCP 同时打开，确实会形成重复入口。
 - 下一步：执行一轮 Codex 预设专项回归：确认 `何一卫` 能在托盘菜单里被识别，确认切到海豹云后 live `config.toml` 仅海豹云使用 `http://42.192.94.176:5002`，而切到 `何一卫 / RC / OpenAI Official` 后会分别恢复各自 URL，再回头继续 Explorer 预览窗格的手工复现。
-- 下一步：等用户最终决定是否要“更像原生 App 的外观”时，再判断是否把 `config/chatgpt_chrome_window.ini -> window_mode` 从 `window` 切到 `app`；若切换后发现多标签页体验不满足，再补更细的多窗口/多标签策略。
+- 下一步：如果用户后续确认还要保留真正的多标签页工作流，再把 `config/chatgpt_chrome_window.ini -> window_mode` 从 `app` 切回 `window`，或补一套“app / window 双实例”切换策略。
 
 ## 关键决策与理由（防止“吃书”）
 - 决策A：热键帮助采用显式注册表，不从注释自动解析。
@@ -55,10 +56,14 @@
   原因：本次现场日志多次证明前台已是 `explorer.exe`、`Ctrl+C` 已发送，但 `ClipWait` 仍超时；继续只调等待时间没有意义，应该改为更贴近 Explorer 内部状态的读取方式。
 - 决策I：Explorer 匹配以“根祖先窗口”而不是“瞬时焦点子窗口”为准。
   原因：右侧预览窗格、文件列表控件、第三方 Preview Handler 都可能拿走前台焦点；若只认瞬时子窗口，脚本会错误地认为自己“不在资源管理器主窗口”。
-- 决策J：ChatGPT 浮窗默认先走普通 Chrome `window` 模式，不默认启用 `app` 模式。
-  原因：用户当前的真实诉求并不是“纯粹去掉浏览器框架”，而是“像小窗 App 一样随叫随到，同时还能保留多个标签页”；普通窗口模式更符合这个组合诉求。
+- 决策J：ChatGPT 浮窗当前默认走 Chrome `app` 模式，默认尺寸收紧为 `540x760`。
+  原因：用户在第一轮落地后明确反馈“默认大小实在太大”，并希望先优先试更像桌面小窗的 app 形态；因此当前先按“小窗优先”而不是“多标签页优先”收口。
 - 决策K：ChatGPT 浮窗的位置/大小状态单独写入 `logs/chatgpt_chrome_window_state.ini`，不混写回 `config/chatgpt_chrome_window.ini`。
   原因：窗口状态是高频变化的运行态数据，若混到静态配置文件里，会让真正需要 review 的功能配置和本机状态搅在一起。
+- 决策L：ChatGPT 浮窗默认禁用右上角关闭按钮，只允许从 AHK 托盘菜单显式彻底关闭。
+  原因：用户明确不希望误点 X 后让整个页面重新刷新；对外部 Chrome 窗口来说，最稳妥的防误关方案不是“关后再救”，而是直接禁用 `SC_CLOSE`。
+- 决策M：ChatGPT 浮窗状态新增 `rect_policy_version`；旧状态版本不匹配时，忽略历史矩形并回退到新的默认小窗尺寸。
+  原因：单纯改配置无法覆盖已经写入本机状态文件的旧大窗矩形；需要一个一次性迁移闸门，才能让“新默认值”真正生效。
 
 ## 常见坑 / 复现方法
 - 坑1：切换 Codex 配置后，已经打开的 Codex 终端通常不会自动重新读取配置；需要关闭并重新打开终端。
@@ -74,4 +79,5 @@
 - 坑7：如果是资源管理器窗口，最新日志里应优先关注 `capture explorer:` 分支；只有当这里明确返回 0 项时，脚本才会退回到旧的 `capture clipboard:` 分支。
 - 坑8：如果右侧预览窗格启用了第三方预览器（例如 WPS 提供的 Office 预览），问题不一定表现为“窗口不是 Explorer”；更常见的是焦点落到 Explorer 内部的预览子窗口，导致旧的 `Ctrl+C` 抓取链路更容易失效。因此这类问题要优先看 `match_hwnd` 和 `match_exe`，不要只盯 `hwnd/exe/title` 的第一层日志。
 - 坑9：`Alt+Space` 管理的是“本模块最后一次启动/识别到的 ChatGPT Chrome 窗口”，不是所有 Chrome 窗口的全局开关；如果用户手动把标签拖成新窗口、或同时保留多个标题都含 `ChatGPT` 的窗口，脚本只能做启发式重识别，不能像独立 Profile 那样 100% 强隔离。
-- 坑10：若未来把 `config/chatgpt_chrome_window.ini` 里的 `window_mode` 改成 `app`，界面会更像桌面 App，但多标签页能力也会随之受限；这是 Chrome 启动模式本身的取舍，不是 AHK 逻辑 bug。
+- 坑10：当前默认已切到 `app`；如果之后又想保留多个标签页，需要把 `config/chatgpt_chrome_window.ini` 里的 `window_mode` 改回 `window`，否则标签页能力会继续受限。这是 Chrome 启动模式本身的取舍，不是 AHK 逻辑 bug。
+- 坑11：旧的 `logs/chatgpt_chrome_window_state.ini` 可能仍保留历史大窗的 `x/y/w/h`；但只要里面的 `rect_policy_version` 还不是当前值，这些旧尺寸就会被自动忽略。这是预期行为，不代表状态迁移失效。

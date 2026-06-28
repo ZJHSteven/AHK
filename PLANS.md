@@ -46,8 +46,10 @@
 - 已完成：新增 `config/chatgpt_chrome_window.ini`、`modules/chatgpt_chrome_window.ahk`、`tests/chatgpt_chrome_window_tests.ahk`。
 - 已完成：`Alt+Space` 已接入 `modules/hotkeys.ahk`，`modules/hotkey_help.ahk` 与 `tests/hotkey_help_tests.ahk` 也已同步。
 - 已完成：配置读取已兼容 UTF-8 BOM，避免用户用常见编辑器保存后 `IniRead` 失效。
+- 已完成：根据用户 2026-06-28 的二次反馈，默认模式已从 `window` 切为 `app`，默认尺寸改为 `540x760`，并新增“禁用右上角关闭按钮 + 托盘菜单显式彻底关闭”的防误关策略。
+- 已完成：新增 `rect_policy_version` 状态迁移逻辑；即使本机 `logs/chatgpt_chrome_window_state.ini` 里残留的是旧的大窗矩形，只要它还没带上当前策略版本，就会自动回落到新的小窗默认值。
 - 已验证：`tests/chatgpt_chrome_window_tests.ahk`、`tests/hotkey_help_tests.ahk`、`tests/markdown_reference_link_inliner_tests.ahk`、`tests/sandbox_bridge_tests.ahk`、`tests/codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 全部通过。
-- 已验证：针对仓库内真实 `config/chatgpt_chrome_window.ini` 的非侵入冒烟已输出实际启动命令，确认当前默认行为为：`Default` Profile + `window` 模式 + `1180x820` + `AlwaysOnTop=1`。
+- 已验证：针对仓库内真实 `config/chatgpt_chrome_window.ini` 的非侵入冒烟已输出实际启动命令，确认当前默认行为为：`Default` Profile + `app` 模式 + `540x760` + `disable_close_button=1`；旧状态文件当前为 `rect_policy_version=0` 时，会解析成新的小窗矩形而不是继续沿用旧大窗。
 
 ## 2026-06-23 Codex 中转预设统一改名为 OpenAI 并新增“何意味”
 
