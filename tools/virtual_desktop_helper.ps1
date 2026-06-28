@@ -28,16 +28,13 @@ public interface IVirtualDesktopManager
     int MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
 }
 
-[ComImport, Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a")]
-public class VirtualDesktopManagerCom
-{
-}
-
 public static class VirtualDesktopBridge
 {
     public static IVirtualDesktopManager CreateManager()
     {
-        return (IVirtualDesktopManager)new VirtualDesktopManagerCom();
+        Type clsid = Type.GetTypeFromCLSID(new Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a"));
+        object instance = Activator.CreateInstance(clsid);
+        return (IVirtualDesktopManager)instance;
     }
 }
 "@
