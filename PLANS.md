@@ -42,6 +42,13 @@
    - 配置缺省值回退。
 5. 更新 `PROGRESS.md`，记录“默认先走普通窗口模式、app 模式保留为配置项”的理由、已验证项与手工使用方法。
 
+### 执行结果
+- 已完成：新增 `config/chatgpt_chrome_window.ini`、`modules/chatgpt_chrome_window.ahk`、`tests/chatgpt_chrome_window_tests.ahk`。
+- 已完成：`Alt+Space` 已接入 `modules/hotkeys.ahk`，`modules/hotkey_help.ahk` 与 `tests/hotkey_help_tests.ahk` 也已同步。
+- 已完成：配置读取已兼容 UTF-8 BOM，避免用户用常见编辑器保存后 `IniRead` 失效。
+- 已验证：`tests/chatgpt_chrome_window_tests.ahk`、`tests/hotkey_help_tests.ahk`、`tests/markdown_reference_link_inliner_tests.ahk`、`tests/sandbox_bridge_tests.ahk`、`tests/codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 全部通过。
+- 已验证：针对仓库内真实 `config/chatgpt_chrome_window.ini` 的非侵入冒烟已输出实际启动命令，确认当前默认行为为：`Default` Profile + `window` 模式 + `1180x820` + `AlwaysOnTop=1`。
+
 ## 2026-06-23 Codex 中转预设统一改名为 OpenAI 并新增“何意味”
 
 ### 背景
