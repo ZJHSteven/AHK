@@ -16,14 +16,14 @@ using System;
 using System.Runtime.InteropServices;
 
 [ComImport, Guid("a5cd92ff-29be-454c-8d04-d82879fb3f1b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IVirtualDesktopManager
+public interface IVirtualDesktopManager
 {
     int IsWindowOnCurrentVirtualDesktop(IntPtr topLevelWindow, out bool onCurrentDesktop);
     int GetWindowDesktopId(IntPtr topLevelWindow, out Guid desktopId);
     int MoveWindowToDesktop(IntPtr topLevelWindow, ref Guid desktopId);
 }
 
-internal static class VirtualDesktopNative
+public static class VirtualDesktopNative
 {
     [DllImport("ole32.dll", ExactSpelling = true)]
     private static extern int CoCreateInstance(
