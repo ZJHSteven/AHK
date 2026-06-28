@@ -130,7 +130,7 @@ AhkToolkitInitializeTrayMenu(root := "", liveDir := "") {
     A_TrayMenu.Add()
     A_TrayMenu.Add("查看热键", HotkeyHelpShowWindow)
     A_TrayMenu.Add("Codex 预设", CodexProfilesBuildTrayMenu(root, liveDir))
-    A_TrayMenu.Add("显示或切换 ChatGPT 浮窗", ChatGptChromeToggleWindow)
+    A_TrayMenu.Add("显示或切换 ChatGPT 浮窗", ChatGptChromeToggleWindowFromTray)
     A_TrayMenu.Add("彻底关闭 ChatGPT 浮窗", ChatGptChromeForceCloseFromTray)
     A_TrayMenu.Add("打开 Codex 预设目录", CodexProfilesOpenRoot)
     A_TrayMenu.Add("校验 Codex 预设", CodexProfilesValidateAllFromTray)

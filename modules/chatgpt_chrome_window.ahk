@@ -92,6 +92,16 @@ ChatGptChromeToggleWindow() {
     Toast("已启动 ChatGPT 浮窗")
 }
 
+; 托盘菜单回调包装器。
+; 入参：菜单事件参数由 AHK 自动传入，但这里不使用。
+; 出参：无。
+; 说明：
+; - `Menu.Add()` 的回调签名与普通无参函数不同；
+; - 因此这里额外包一层 `(*)` 兼容托盘菜单调用约定。
+ChatGptChromeToggleWindowFromTray(*) {
+    ChatGptChromeToggleWindow()
+}
+
 ; 读取模块所在项目根目录。
 ; 入参：
 ; - root：测试时可传临时根目录；正常运行留空。

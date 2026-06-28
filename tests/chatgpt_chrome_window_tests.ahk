@@ -128,7 +128,11 @@ ChatGptChromeTestNormalizeRectClampsToWorkArea() {
 }
 
 ChatGptChromeTestIsWindowMinimizedHandlesInvalidHwnd() {
-    result := ChatGptChromeIsWindowMinimized(3738822)
+    tempGui := Gui()
+    tempGui.Show("Hide")
+    hwnd := tempGui.Hwnd
+    tempGui.Destroy()
+    result := ChatGptChromeIsWindowMinimized(hwnd)
     ChatGptChromeAssertTrue(!result, "失效 hwnd 不应再抛错，而应安全返回 false")
 }
 
