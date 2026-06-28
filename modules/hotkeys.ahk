@@ -4,7 +4,6 @@
 #Include ctrlx_spotify_combo.ahk
 #Include chat_message_cleaner.ahk
 #Include markdown_reference_link_inliner.ahk
-#Include chatgpt_chrome_window.ahk
 ; ============================================
 ; 你的热键集合（保持与你原脚本的功能一致）
 ; ============================================

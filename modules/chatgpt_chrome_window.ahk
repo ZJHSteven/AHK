@@ -10,6 +10,7 @@
 ; 4) 支持切到 app 模式，但只作为配置项保留，不默认启用。
 ; 5) 记住用户最后一次手动拖动/缩放后的窗口位置和大小。
 ; 6) 保持窗口置顶，尽量模拟“桌面小窗工作台”的使用手感。
+; 7) 默认禁用右上角关闭按钮，避免误点 X 导致整个 ChatGPT 页面重开。
 ;
 ; 设计取舍：
 ; - 由于用户明确要求“不要新建 Profile”，这里不能靠独立 user-data-dir
@@ -17,6 +18,9 @@
 ; - 因此本模块采用“记录自己启动出来的那个窗口 HWND”为主，
 ;   再辅以轻量启发式重新识别，尽量稳定管理同一个浮窗。
 ; - 如果用户手动把标签拖成新的窗口、或彻底关闭该窗口，下一次热键会重新启动。
+; - 由于这是在“外部 Chrome 窗口”上做控制，而不是自己绘制一个 GUI，
+;   所以最稳妥的“防误关”方案不是拦截关闭后再恢复，
+;   而是直接把 Close 按钮禁用掉，并把“真正关闭”收口到 AHK 托盘菜单。
 ; ============================================
 
 global g_ChatGptChromeTrackIntervalMs := 800
@@ -136,11 +140,12 @@ ChatGptChromeReadSettings(root := "") {
     chromePath := ChatGptChromeIniGet(parsedIni, "launch", "chrome_path", "")
     url := ChatGptChromeIniGet(parsedIni, "launch", "url", "https://chatgpt.com/")
     profileDirectory := ChatGptChromeIniGet(parsedIni, "launch", "profile_directory", "Default")
-    windowMode := ChatGptChromeIniGet(parsedIni, "launch", "window_mode", "window")
+    windowMode := ChatGptChromeIniGet(parsedIni, "launch", "window_mode", "app")
     startupTimeoutMs := ChatGptChromeIniGet(parsedIni, "launch", "startup_timeout_ms", "8000")
-    defaultWidth := ChatGptChromeIniGet(parsedIni, "window", "default_width", "1180")
-    defaultHeight := ChatGptChromeIniGet(parsedIni, "window", "default_height", "820")
+    defaultWidth := ChatGptChromeIniGet(parsedIni, "window", "default_width", "540")
+    defaultHeight := ChatGptChromeIniGet(parsedIni, "window", "default_height", "760")
     alwaysOnTop := ChatGptChromeIniGet(parsedIni, "window", "always_on_top", "1")
+    disableCloseButton := ChatGptChromeIniGet(parsedIni, "window", "disable_close_button", "1")
 
     chromePath := Trim(chromePath, " `t`r`n")
     if (chromePath = "") {
@@ -153,9 +158,10 @@ ChatGptChromeReadSettings(root := "") {
         "profileDirectory", Trim(profileDirectory, " `t`r`n"),
         "windowMode", ChatGptChromeNormalizeWindowMode(windowMode),
         "startupTimeoutMs", ChatGptChromeParsePositiveInt(startupTimeoutMs, 8000),
-        "defaultWidth", ChatGptChromeParsePositiveInt(defaultWidth, 1180),
-        "defaultHeight", ChatGptChromeParsePositiveInt(defaultHeight, 820),
-        "alwaysOnTop", ChatGptChromeParseIniBool(alwaysOnTop, true)
+        "defaultWidth", ChatGptChromeParsePositiveInt(defaultWidth, 540),
+        "defaultHeight", ChatGptChromeParsePositiveInt(defaultHeight, 760),
+        "alwaysOnTop", ChatGptChromeParseIniBool(alwaysOnTop, true),
+        "disableCloseButton", ChatGptChromeParseIniBool(disableCloseButton, true)
     )
 }
 
@@ -280,7 +286,7 @@ ChatGptChromeDetectChromePath() {
 
 ; 读取本地状态。
 ; 入参：可选 root。
-; 出参：Map，包含 lastHwnd/x/y/w/h/hasRect。
+; 出参：Map，包含 lastHwnd/x/y/w/h/hasRect/savedWindowMode。
 ChatGptChromeReadState(root := "") {
     statePath := ChatGptChromeStatePath(root)
     lastHwnd := FileExist(statePath) ? IniRead(statePath, "window", "last_hwnd", "") : ""
@@ -288,6 +294,7 @@ ChatGptChromeReadState(root := "") {
     y := FileExist(statePath) ? IniRead(statePath, "window", "y", "") : ""
     w := FileExist(statePath) ? IniRead(statePath, "window", "w", "") : ""
     h := FileExist(statePath) ? IniRead(statePath, "window", "h", "") : ""
+    savedWindowMode := FileExist(statePath) ? IniRead(statePath, "window", "window_mode", "") : ""
 
     hasRect := RegExMatch(x, "^-?\d+$")
         && RegExMatch(y, "^-?\d+$")
@@ -300,7 +307,8 @@ ChatGptChromeReadState(root := "") {
         "y", hasRect ? Integer(y) : 0,
         "w", hasRect ? Integer(w) : 0,
         "h", hasRect ? Integer(h) : 0,
-        "hasRect", hasRect
+        "hasRect", hasRect,
+        "savedWindowMode", Trim(savedWindowMode, " `t`r`n")
     )
 }
 
@@ -315,6 +323,19 @@ ChatGptChromeWriteState(state, root := "") {
     IniWrite(state["y"], statePath, "window", "y")
     IniWrite(state["w"], statePath, "window", "w")
     IniWrite(state["h"], statePath, "window", "h")
+    IniWrite(state.Has("savedWindowMode") ? state["savedWindowMode"] : "", statePath, "window", "window_mode")
+}
+
+; 清空“当前受管窗口”的句柄记忆，但保留位置/大小。
+; 入参：可选 root。
+; 出参：无。
+; 说明：
+; - 当窗口已经被用户或系统真正关闭后，保留旧 hwnd 只会造成后续恢复时报错。
+; - 这里故意不删除 x/y/w/h，因为用户通常仍希望下次新开时回到原位置。
+ChatGptChromeForgetManagedWindow(root := "") {
+    state := ChatGptChromeReadState(root)
+    state["lastHwnd"] := 0
+    ChatGptChromeWriteState(state, root)
 }
 
 ; 尝试解析当前正在被本模块管理的窗口。
@@ -327,6 +348,10 @@ ChatGptChromeResolveManagedWindow() {
     state := ChatGptChromeReadState()
     if ChatGptChromeIsWindowHandleUsable(state["lastHwnd"]) {
         return state["lastHwnd"]
+    }
+
+    if (state["lastHwnd"] != 0) {
+        ChatGptChromeForgetManagedWindow()
     }
 
     hwnd := ChatGptChromeFindManagedWindowByHeuristic(state)
@@ -409,7 +434,12 @@ ChatGptChromeIsWindowMinimized(hwnd) {
     if !ChatGptChromeIsWindowHandleUsable(hwnd) {
         return false
     }
-    return WinGetMinMax("ahk_id " hwnd) = -1
+    try {
+        return WinGetMinMax("ahk_id " hwnd) = -1
+    } catch TargetError {
+        ChatGptChromeForgetManagedWindow()
+        return false
+    }
 }
 
 ; 把当前窗口提升为前台并应用置顶/位置。
@@ -422,11 +452,9 @@ ChatGptChromeShowManagedWindow(hwnd, settings) {
         WinRestore("ahk_id " hwnd)
     }
     WinMove(rect["x"], rect["y"], rect["w"], rect["h"], "ahk_id " hwnd)
-    if settings["alwaysOnTop"] {
-        WinSetAlwaysOnTop(1, "ahk_id " hwnd)
-    }
+    ChatGptChromeApplyWindowProtections(hwnd, settings)
     WinActivate("ahk_id " hwnd)
-    ChatGptChromeSaveWindowPlacement(hwnd)
+    ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
 }
 
 ; 启动一个新的受管 Chrome 窗口。
@@ -447,11 +475,9 @@ ChatGptChromeLaunchManagedWindow(settings) {
         return Map("ok", false, "message", "Chrome 已启动，但在超时时间内没有等到新的 ChatGPT 窗口。", "hwnd", 0)
     }
 
-    if settings["alwaysOnTop"] {
-        WinSetAlwaysOnTop(1, "ahk_id " hwnd)
-    }
+    ChatGptChromeApplyWindowProtections(hwnd, settings)
     WinActivate("ahk_id " hwnd)
-    ChatGptChromeSaveWindowPlacement(hwnd)
+    ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
     return Map("ok", true, "message", "已启动 ChatGPT 浮窗", "hwnd", hwnd)
 }
 
@@ -537,7 +563,7 @@ ChatGptChromeWaitForNewChromeWindow(beforeSet, timeoutMs) {
 ; 2) 若没有，则根据鼠标所在显示器工作区做一个居中的默认矩形；
 ; 3) 最后再统一做边界收敛，避免窗口完全飞出屏幕。
 ChatGptChromeResolveTargetRect(settings, state) {
-    if state["hasRect"] {
+    if (state["hasRect"] && state["savedWindowMode"] = settings["windowMode"]) {
         return ChatGptChromeNormalizeRect(Map(
             "x", state["x"],
             "y", state["y"],
@@ -560,7 +586,7 @@ ChatGptChromeResolveTargetRect(settings, state) {
 ; 记录当前窗口的最新位置与大小。
 ; 入参：hwnd；可选 root。
 ; 出参：true=已保存或无变化；false=读取失败。
-ChatGptChromeSaveWindowPlacement(hwnd, root := "") {
+ChatGptChromeSaveWindowPlacement(hwnd, root := "", settings := "") {
     global g_ChatGptChromeLastSavedRectSignature
     if !ChatGptChromeIsWindowHandleUsable(hwnd) {
         return false
@@ -580,7 +606,8 @@ ChatGptChromeSaveWindowPlacement(hwnd, root := "") {
         "x", x,
         "y", y,
         "w", w,
-        "h", h
+        "h", h,
+        "savedWindowMode", IsObject(settings) ? settings["windowMode"] : ChatGptChromeReadState(root)["savedWindowMode"]
     )
     signature := x "|" y "|" w "|" h "|" hwnd
     if (signature = g_ChatGptChromeLastSavedRectSignature) {
@@ -599,9 +626,13 @@ ChatGptChromeSaveWindowPlacement(hwnd, root := "") {
 ; - 这里只做“轻量快照”。
 ; - 只有当窗口存在、可见、且不是最小化时才会写状态。
 ChatGptChromeTrackManagedWindowPlacement() {
+    settings := ChatGptChromeReadSettings()
     state := ChatGptChromeReadState()
     hwnd := state["lastHwnd"]
     if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+        if (hwnd != 0) {
+            ChatGptChromeForgetManagedWindow()
+        }
         return
     }
     if !ChatGptChromeIsWindowVisible(hwnd) {
@@ -610,7 +641,8 @@ ChatGptChromeTrackManagedWindowPlacement() {
     if ChatGptChromeIsWindowMinimized(hwnd) {
         return
     }
-    ChatGptChromeSaveWindowPlacement(hwnd)
+    ChatGptChromeApplyWindowProtections(hwnd, settings)
+    ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
 }
 
 ; 获取鼠标当前所在显示器的工作区。
@@ -699,6 +731,71 @@ ChatGptChromeNormalizeRect(rect) {
     }
 
     return Map("x", x, "y", y, "w", width, "h", height)
+}
+
+; 对受管窗口应用“置顶 + 防误关”保护。
+; 入参：hwnd、settings。
+; 出参：无。
+; 说明：
+; - 右上角关闭按钮被禁用后，用户误点 X 时不会把整个 ChatGPT 会话关掉。
+; - 真正想关闭时，使用 AHK 托盘菜单“彻底关闭 ChatGPT 浮窗”。
+ChatGptChromeApplyWindowProtections(hwnd, settings) {
+    if settings["alwaysOnTop"] {
+        WinSetAlwaysOnTop(1, "ahk_id " hwnd)
+    }
+    if settings["disableCloseButton"] {
+        ChatGptChromeSetCloseButtonEnabled(hwnd, false)
+    } else {
+        ChatGptChromeSetCloseButtonEnabled(hwnd, true)
+    }
+}
+
+; 启用或禁用窗口右上角关闭按钮。
+; 入参：hwnd、enabled。
+; 出参：true=调用成功；false=窗口无效或系统菜单不可用。
+; 实现依据：
+; - Windows 关闭按钮本质上挂在系统菜单的 `SC_CLOSE` 项上；
+; - 禁用该菜单项后，标题栏 X 与 Alt+F4 都会一起失效或变灰。
+ChatGptChromeSetCloseButtonEnabled(hwnd, enabled) {
+    if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+        return false
+    }
+
+    hMenu := DllCall("GetSystemMenu", "ptr", hwnd, "int", false, "ptr")
+    if !hMenu {
+        return false
+    }
+
+    command := 0xF060  ; SC_CLOSE
+    flags := enabled ? 0x0 : 0x3  ; MF_ENABLED : MF_DISABLED|MF_GRAYED
+    result := DllCall("EnableMenuItem", "ptr", hMenu, "uint", command, "uint", 0x0 | flags, "int")
+    DllCall("DrawMenuBar", "ptr", hwnd)
+    return result != -1
+}
+
+; 从托盘菜单彻底关闭受管的 ChatGPT 浮窗。
+; 入参：菜单事件参数自动传入，但本函数不使用。
+; 出参：无。
+; 说明：
+; - 这是真正的“关闭”，不是 Alt+Space 的临时收起。
+; - 关闭后会清除 last_hwnd；下次 Alt+Space 会重新新开一个 app 窗口。
+ChatGptChromeForceCloseFromTray(*) {
+    settings := ChatGptChromeReadSettings()
+    hwnd := ChatGptChromeResolveManagedWindow()
+    if !hwnd {
+        Toast("当前没有可关闭的 ChatGPT 浮窗。")
+        return
+    }
+
+    ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
+    ChatGptChromeSetCloseButtonEnabled(hwnd, true)
+    try WinClose("ahk_id " hwnd)
+    Sleep(250)
+    if ChatGptChromeIsWindowHandleUsable(hwnd) {
+        try PostMessage(0x0112, 0xF060, 0, , "ahk_id " hwnd)
+    }
+    ChatGptChromeForgetManagedWindow()
+    Toast("已彻底关闭 ChatGPT 浮窗")
 }
 
 ; 模块载入时就启动位置跟踪器。

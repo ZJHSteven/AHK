@@ -33,6 +33,7 @@ ChatGptChromeRunAllTests() {
         ChatGptChromeTestBuildAppCommand()
         ChatGptChromeTestCenteredRect()
         ChatGptChromeTestNormalizeRectClampsToWorkArea()
+        ChatGptChromeTestResolveTargetRectIgnoresSavedRectWhenModeChanged()
         ChatGptChromeTestReadSettingsFallsBackToDefaults(root)
         ChatGptChromeTestReadSettingsRespectsConfig(root)
     } finally {
@@ -129,10 +130,11 @@ ChatGptChromeTestReadSettingsFallsBackToDefaults(root) {
     settings := ChatGptChromeReadSettings(root)
     ChatGptChromeAssertEqual(settings["url"], "https://chatgpt.com/", "缺配置时应回退官方 URL")
     ChatGptChromeAssertEqual(settings["profileDirectory"], "Default", "缺配置时应回退 Default Profile")
-    ChatGptChromeAssertEqual(settings["windowMode"], "window", "缺配置时应回退普通窗口模式")
-    ChatGptChromeAssertEqual(settings["defaultWidth"], 1180, "缺配置时应回退默认宽度")
-    ChatGptChromeAssertEqual(settings["defaultHeight"], 820, "缺配置时应回退默认高度")
+    ChatGptChromeAssertEqual(settings["windowMode"], "app", "缺配置时应回退 app 小窗模式")
+    ChatGptChromeAssertEqual(settings["defaultWidth"], 540, "缺配置时应回退默认宽度")
+    ChatGptChromeAssertEqual(settings["defaultHeight"], 760, "缺配置时应回退默认高度")
     ChatGptChromeAssertTrue(settings["alwaysOnTop"], "缺配置时应默认置顶")
+    ChatGptChromeAssertTrue(settings["disableCloseButton"], "缺配置时应默认禁用关闭按钮")
 }
 
 ChatGptChromeTestReadSettingsRespectsConfig(root) {
@@ -150,6 +152,7 @@ startup_timeout_ms=12000
 default_width=1024
 default_height=768
 always_on_top=0
+disable_close_button=0
 )")
 
     settings := ChatGptChromeReadSettings(root)
@@ -160,4 +163,25 @@ always_on_top=0
     ChatGptChromeAssertEqual(settings["defaultWidth"], 1024, "应读取配置中的默认宽度")
     ChatGptChromeAssertEqual(settings["defaultHeight"], 768, "应读取配置中的默认高度")
     ChatGptChromeAssertTrue(!settings["alwaysOnTop"], "应读取配置中的置顶开关")
+    ChatGptChromeAssertTrue(!settings["disableCloseButton"], "应读取配置中的关闭按钮开关")
+}
+
+ChatGptChromeTestResolveTargetRectIgnoresSavedRectWhenModeChanged() {
+    settings := Map(
+        "defaultWidth", 540,
+        "defaultHeight", 760,
+        "windowMode", "app"
+    )
+    state := Map(
+        "x", 10,
+        "y", 10,
+        "w", 1600,
+        "h", 1000,
+        "hasRect", true,
+        "savedWindowMode", "window"
+    )
+    rect := ChatGptChromeResolveTargetRect(settings, state)
+
+    ChatGptChromeAssertEqual(rect["w"], 540, "模式切换后不应继续沿用旧的大宽度")
+    ChatGptChromeAssertEqual(rect["h"], 760, "模式切换后不应继续沿用旧的大高度")
 }

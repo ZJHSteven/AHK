@@ -12,6 +12,7 @@ SetWorkingDir A_ScriptDir
 ; ---- 引入模块 ----
 #Include modules\utils.ahk
 #Include modules\codex_profile_switcher.ahk
+#Include modules\chatgpt_chrome_window.ahk
 #Include modules\hotkey_help.ahk
 #Include modules\hotkeys.ahk
 #Include modules\window_switch.ahk
