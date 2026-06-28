@@ -49,7 +49,8 @@ function Assert-HResult {
     )
 
     if ($HResult -ne 0) {
-        throw "$Operation 失败，HRESULT=0x{0:X8}" -f ($HResult -band 0xFFFFFFFF)
+        $message = "{0} 失败，HRESULT=0x{1:X8}" -f $Operation, ($HResult -band 0xFFFFFFFF)
+        throw $message
     }
 }
 
