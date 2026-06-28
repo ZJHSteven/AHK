@@ -546,9 +546,11 @@ ChatGptChromePruneDuplicateManagedWindows(preferredHwnd, settings, state) {
         }
     }
 
-    if ChatGptChromeIsWindowHandleUsable(preferredHwnd) {
-        ChatGptChromeSaveWindowPlacement(preferredHwnd, "", settings)
-    }
+    ; 这里不主动写回尺寸。
+    ; 原因：
+    ; - 若现场已经误开出第二个实例，首选窗口判定还处在“纠错”阶段；
+    ; - 此时立刻保存 preferredHwnd 的当前尺寸，容易把误开实例的大窗尺寸污染进状态文件。
+    ; 真正的尺寸保存，统一留给“显式收起 / 显式恢复 / 定时追踪”路径负责。
 }
 
 ; 判断一个 Chrome 顶层窗口是否“像是”本模块管理的 ChatGPT 窗口。
@@ -675,8 +677,7 @@ ChatGptChromeIsWindowVisible(hwnd) {
 ; - Windows 官方 `DWMWA_CLOAKED` 属性可告诉我们“窗口当前为什么不可被用户看到”。
 ; - 其中 `DWM_CLOAKED_SHELL` 是 Shell 主动 cloak 的情况，
 ;   这正是“窗口还活着，但现在不在当前虚拟桌面上”的重要信号。
-; - 这里先走一个成本很低的本地 DWM 查询，只有真出现 cloak 信号时，
-;   才再去调用较慢的 PowerShell 虚拟桌面 helper。
+; - 这里先走一个成本很低的本地 DWM 查询，只把它当成“像不像留在别的桌面”的判断信号。
 ChatGptChromeGetWindowCloakedReason(hwnd) {
     if !ChatGptChromeIsWindowHandleUsable(hwnd) {
         return 0
@@ -776,6 +777,11 @@ ChatGptChromeLaunchManagedWindow(settings) {
         return Map("ok", false, "message", "Chrome 已启动，但在超时时间内没有等到新的 ChatGPT 窗口。", "hwnd", 0)
     }
 
+    ; Chrome app 新开时，可能会先按它自己的记忆恢复成一个更大的窗口，
+    ; 无视我们命令行里传入的 `--window-size/--window-position`。
+    ; 如果这里立刻保存当前实际尺寸，就会把用户之前手调好的小窗状态污染掉。
+    ; 因此现在改成：窗口出现后，先强制移动到目标矩形，再保存状态。
+    try WinMove(rect["x"], rect["y"], rect["w"], rect["h"], "ahk_id " hwnd)
     ChatGptChromeApplyWindowProtections(hwnd, settings)
     WinActivate("ahk_id " hwnd)
     ChatGptChromeSaveWindowPlacement(hwnd, "", settings)
@@ -813,101 +819,17 @@ ChatGptChromeQuoteSwitchValue(value) {
     return Chr(34) StrReplace(value, Chr(34), Chr(92) Chr(34)) Chr(34)
 }
 
-; 返回虚拟桌面 PowerShell helper 路径。
-; 入参：可选 root。
-; 出参：绝对路径。
-ChatGptChromeVirtualDesktopHelperPath(root := "") {
-    return ChatGptChromeProjectRoot(root) "\tools\virtual_desktop_helper.ps1"
-}
-
-; 运行虚拟桌面 helper。
-; 入参：mode、targetHwnd、anchorHwnd。
-; 出参：Map("ok", bool, "output", 文本, "message", 文本)。
-ChatGptChromeRunVirtualDesktopHelper(mode, targetHwnd, anchorHwnd := 0) {
-    helperPath := ChatGptChromeVirtualDesktopHelperPath()
-    if !FileExist(helperPath) {
-        return Map("ok", false, "output", "", "message", "缺少虚拟桌面 helper：" helperPath)
-    }
-
-    psPath := A_WinDir "\System32\WindowsPowerShell\v1.0\powershell.exe"
-    outputPath := A_Temp "\ahk_chatgpt_vd_" A_TickCount ".txt"
-    command := ChatGptChromeQuoteStandaloneArg(psPath)
-        . " -NoProfile -ExecutionPolicy Bypass -File "
-        . ChatGptChromeQuoteStandaloneArg(helperPath)
-        . " -Mode " ChatGptChromeQuoteStandaloneArg(mode)
-        . " -TargetHwnd " targetHwnd
-        . " -AnchorHwnd " anchorHwnd
-        . " -OutputPath " ChatGptChromeQuoteStandaloneArg(outputPath)
-
-    exitCode := RunWait(command, , "Hide")
-    output := FileExist(outputPath) ? Trim(FileRead(outputPath, "UTF-8"), " `t`r`n") : ""
-    try FileDelete(outputPath)
-
-    if (exitCode = 0) {
-        return Map("ok", true, "output", output, "message", "")
-    }
-    if (output = "") {
-        output := "虚拟桌面 helper 失败，退出码 " exitCode
-    }
-    return Map("ok", false, "output", output, "message", output)
-}
-
-; 判断窗口当前是否位于当前虚拟桌面。
-; 入参：hwnd。
-; 出参：true / false。
-; 说明：
-; - 若 helper 调用失败，这里保守返回 true，避免把 helper 故障误判成“窗口一定不在当前桌面”。
-ChatGptChromeIsWindowOnCurrentVirtualDesktop(hwnd) {
-    if !ChatGptChromeIsWindowHandleUsable(hwnd) {
-        return false
-    }
-
-    result := ChatGptChromeRunVirtualDesktopHelper("is-current", hwnd, 0)
-    if !result["ok"] {
-        return true
-    }
-    return result["output"] = "1"
-}
-
-; 尝试把窗口移动到当前虚拟桌面。
-; 入参：targetHwnd。
-; 出参：true=已经在当前桌面或移动成功；false=移动失败。
-; 说明：
-; - 当前桌面的 GUID 通过“当前前台窗口”的桌面 GUID 间接获得。
-ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(targetHwnd) {
-    if !ChatGptChromeIsWindowHandleUsable(targetHwnd) {
-        return false
-    }
-    if ChatGptChromeIsWindowOnCurrentVirtualDesktop(targetHwnd) {
-        return true
-    }
-
-    try anchorHwnd := WinGetID("A")
-    catch {
-        anchorHwnd := 0
-    }
-    if !(anchorHwnd is Integer) || (anchorHwnd <= 0) {
-        return false
-    }
-
-    result := ChatGptChromeRunVirtualDesktopHelper("move-to-current", targetHwnd, anchorHwnd)
-    return result["ok"]
-}
-
 ; 尝试把“还活着、但当前不在本桌面的旧窗口”召回到当前桌面。
 ; 入参：hwnd、settings。
 ; 出参：true=召回成功；false=召回失败。
 ; 说明：
-; 1) 首选仍然是官方虚拟桌面 helper，语义最直接。
-; 2) 但即使 helper 失败，也不能忘掉旧实例，更不能转头新开第二个。
-; 3) 用户现场已经证明：同一个窗口在“先收起再唤起”时，可以跨桌面复用。
-;    所以这里补一个 hide/show 兜底，尽量把已有实例重新拉回当前工作流。
+; 1) 这里彻底不再依赖额外 helper。
+; 2) 用户现场已经证明：同一个窗口在“先收起再唤起”时，可以跨桌面复用。
+; 3) 因此这里直接把“召回”收口成最朴素的 hide/show 流程：
+;    先把旧实例收一下，再按当前桌面的目标矩形重新展开。
 ChatGptChromeRecallWindowToCurrentDesktop(hwnd, settings) {
     if !ChatGptChromeIsWindowHandleUsable(hwnd) {
         return false
-    }
-    if ChatGptChromeEnsureWindowOnCurrentVirtualDesktop(hwnd) {
-        return ChatGptChromeShowManagedWindow(hwnd, settings)
     }
 
     try WinHide("ahk_id " hwnd)
