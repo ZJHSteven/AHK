@@ -77,8 +77,7 @@
 - 已完成：`Alt+Space` 的切换语义已调整为“只要当前受管窗可见，就直接收起”；不再要求先激活再按第二次。
 - 已完成：新增启动防抖与互斥锁，避免连续快按或上一轮尚未等到窗口时重复 `Run --app=...`。
 - 已完成：`WinShow/WinMove/WinActivate/WinSetAlwaysOnTop` 等路径已补竞态保护；若外部 Chrome 窗口在操作过程中失效，脚本会清理受管状态并安全返回，不再直接抛 `Target window not found`。
-- 已完成：新增 `tools/virtual_desktop_helper.ps1`，基于 Windows 官方公开的 `IVirtualDesktopManager` 把“窗口是否在当前虚拟桌面”和“把窗口搬到当前虚拟桌面”封装成可复用 helper，并接入 `ChatGptChromeEnsureWindowOnCurrentVirtualDesktop()`。
-- 已验证：真实冒烟已确认 AHK 包装器调用虚拟桌面 helper 成功，当前前台窗口返回 `ok=1`、`output=1`，说明“当前桌面判断”这条官方接口链路可用。
+- 已完成：这一版已撤回 `tools/virtual_desktop_helper.ps1` 与对应调用链，不再依赖 PowerShell + C# 桥接虚拟桌面接口；跨桌面场景统一回退为“已有实例先收起、再在当前桌面重新展开”的简单逻辑。
 - 已验证：`tests/chatgpt_chrome_window_tests.ahk` 已增至 48 项并全部通过；`tests/hotkey_help_tests.ahk` 10 项通过；`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过；`tests/sandbox_bridge_tests.ahk` 11 项通过；`tests/codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 也通过。
 
 ## 2026-06-28 ChatGPT 浮窗回归排障：热键变慢与跨桌面仍误开
@@ -102,10 +101,11 @@
 5. 再跑 ChatGPT 模块测试、热键帮助测试、主脚本 `/Validate` 与现有相关回归，确认本轮没有把原有单实例语义打坏。
 
 ### 执行结果
-- 已完成：`ChatGptChromeToggleWindow()` 的常规热路径已不再默认调用虚拟桌面 helper；当前只在窗口疑似被 DWM cloak、也就是很像“还活着但留在别的虚拟桌面”时，才进入跨桌面补救路径。
+- 已完成：`ChatGptChromeToggleWindow()` 的常规热路径已不再默认调用任何额外 helper；当前发现窗口疑似被 DWM cloak 时，也只走“hide/show 召回”的简单补救逻辑，不再桥接虚拟桌面 COM 接口。
 - 已完成：新增 `ChatGptChromeHandleExistingWindow()`，把“已有实例”的恢复/隐藏/跨桌面召回统一收口；旧实例只要句柄还活着，就不会再因为跨桌面失败而被忘掉，更不会继续误开第二个实例。
-- 已完成：新增 `ChatGptChromeGetWindowCloakedReason()` 与 `ChatGptChromeShouldAttemptDesktopRecall()`，先用本地 DWM 低成本判断筛掉绝大多数普通同桌面切换，避免每次热键都去跑 PowerShell + C# helper。
+- 已完成：新增 `ChatGptChromeGetWindowCloakedReason()` 与 `ChatGptChromeShouldAttemptDesktopRecall()`，先用本地 DWM 低成本判断筛掉绝大多数普通同桌面切换；一旦疑似留在别的桌面，就直接走 hide/show 召回，不再保留 PowerShell + C# helper。
 - 已完成：启动防抖时间窗从 `1200ms` 收紧到 `250ms`；配合“已有 hwnd 优先处理”的主分支，热键体感已回到更接近上一轮的即时响应。
+- 已完成：修正“误开新实例后窗口尺寸被污染”问题；现在新窗口出现后，会先 `WinMove` 到目标矩形，再写回状态文件，不再把 Chrome 自己恢复出来的错误大窗尺寸反写进记忆状态。
 - 已完成：补充跨桌面门控纯逻辑测试，确保“可见且被 cloak 才尝试跨桌面补救；未 cloak 或不可见时不走慢路径”。
 - 已验证：`tests/chatgpt_chrome_window_tests.ahk` 53 项通过、`tests/hotkey_help_tests.ahk` 10 项通过、`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过、`tests/sandbox_bridge_tests.ahk` 11 项通过、`tests/codex_profile_switcher_tests.ahk` 通过，且 `main.ahk /Validate` 通过。
 
