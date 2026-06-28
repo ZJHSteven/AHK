@@ -138,7 +138,7 @@ ChatGptChromeTestReadSettingsFallsBackToDefaults(root) {
 ChatGptChromeTestReadSettingsRespectsConfig(root) {
     configPath := ChatGptChromeConfigPath(root)
     ChatGptChromeWriteText(configPath, "
-    (
+(
 [launch]
 url=https://chatgpt.com/g/g-123-demo
 chrome_path=C:\Tools\Chrome\chrome.exe
@@ -150,7 +150,7 @@ startup_timeout_ms=12000
 default_width=1024
 default_height=768
 always_on_top=0
-    )")
+)")
 
     settings := ChatGptChromeReadSettings(root)
     ChatGptChromeAssertEqual(settings["url"], "https://chatgpt.com/g/g-123-demo", "应读取配置中的 URL")
