@@ -1,5 +1,47 @@
 # ExecPlan
 
+## 2026-06-28 用 AHK 管理 Chrome 版 ChatGPT 浮动窗
+
+### 背景
+- 目标：用 AHK + Chrome 替代 Windows 官方 ChatGPT Desktop App，提供一个可用 `Alt+Space` 快速唤起/收起的置顶浮动窗。
+- 用户刚确认的硬需求：
+  - 热键固定为 `Alt+Space`。
+  - 浮动窗必须 `Always on Top`，并尽量像“小窗工作台”一样随时压在别的窗口之上。
+  - 首次启动有默认大小，但后续允许手动拖动、缩放。
+  - 再次收起/唤起后，要记住上一次的窗口位置和尺寸。
+  - 必须复用 Chrome 的默认正常 Profile，不新建独立 Profile。
+- 当前取舍点：
+  - 若走 Chrome `--app=` 模式，更像桌面 App，但天然不适合“保留多个标签页”。
+  - 若走普通 `--new-window` 模式，可以保留标签页，但窗口外观会更像浏览器。
+- 本轮决策：
+  - 默认先实现“普通 Chrome 专用窗口模式”，保证多个标签页可用、复用默认 Profile、由 AHK 接管窗口显示/隐藏/置顶/位置记忆。
+  - 同时把 `app` 模式做成配置项，方便后续若用户确认要更纯的 App 外观时，只改配置、不重写逻辑。
+
+### 预期结果
+- 新增独立模块管理 ChatGPT Chrome 浮窗，不把复杂逻辑堆进 `modules/hotkeys.ahk`。
+- `Alt+Space`：
+  - 若浮窗不存在：启动 Chrome 默认 Profile 并打开 ChatGPT。
+  - 若浮窗已存在但被隐藏/最小化：恢复到上次位置和尺寸并激活。
+  - 若浮窗正在前台：保存最新位置和尺寸后隐藏。
+  - 若浮窗存在但不在前台：激活并保持置顶。
+- 窗口位置/尺寸状态写入本地状态文件，不污染功能配置文件。
+- 补测试覆盖配置解析、启动参数拼装、窗口矩形计算等纯逻辑，并执行主脚本语法校验与现有回归测试。
+
+### 实现步骤
+1. 新增 `config/chatgpt_chrome_window.ini`，把 URL、窗口模式、默认尺寸、Profile 名称等放进可读配置。
+2. 新增 `modules/chatgpt_chrome_window.ahk`：
+   - 自动探测本机 Chrome 路径。
+   - 拼接 `Default` Profile 的启动参数。
+   - 管理浮窗的显示、隐藏、置顶、位置恢复与状态持久化。
+   - 用轻量轮询持续记录用户手动拖动/缩放后的最新位置。
+3. 在 `modules/hotkeys.ahk` 挂载 `Alt+Space`，并在 `modules/hotkey_help.ahk` 补帮助说明。
+4. 新增 `tests/chatgpt_chrome_window_tests.ahk`，覆盖：
+   - `window/app` 模式归一化；
+   - Chrome 启动参数拼装；
+   - 默认窗口矩形居中与边界收敛；
+   - 配置缺省值回退。
+5. 更新 `PROGRESS.md`，记录“默认先走普通窗口模式、app 模式保留为配置项”的理由、已验证项与手工使用方法。
+
 ## 2026-06-23 Codex 中转预设统一改名为 OpenAI 并新增“何意味”
 
 ### 背景
