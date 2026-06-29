@@ -46,7 +46,7 @@
 - 已验证：`tests\sandbox_bridge_tests.ahk`、`tests\hotkey_help_tests.ahk`、`tests\codex_profile_switcher_tests.ahk`、`tests\markdown_reference_link_inliner_tests.ahk` 与 `main.ahk /Validate` 全部通过。
 - 已验证：本轮已补“auth refresh 后仍能识别当前预设”、“切换前先回写来源整文件”与“config 已漂移时仍可依赖 last_switch 回写来源整文件”三条自动化用例；落地后需要再次执行 `tests\codex_profile_switcher_tests.ahk` 与 `main.ahk /Validate` 做回归确认。
 - 已验证：Cloudflare 插件缓存当前真实结构是 `skills + .mcp.json`，其中 `.mcp.json` 暴露的就是 `cloudflare-api -> https://mcp.cloudflare.com/mcp`；GitHub 插件缓存真实结构则是 `skills + .app.json`，说明把 `cloudflare/github` plugin 与 plain MCP 同时打开，确实会形成重复入口。
-- 已完成：按用户 2026-06-29 的更正，第三套预设的用户可见中文名已统一从“何一卫”改为“何意味”，内部 id 也进一步从倒序残留的 `heweiyi` 收口为正序拼音 `heyiwei`；对应 secrets 路径、模板成员列表、测试夹具和验证说明均已同步，避免后续看配置和日志时继续混淆。
+- 已完成：按用户 2026-06-29 的更正，第三套预设的用户可见中文名与内部 id 已统一收口为“何意味 / `heyiwei`”；对应 secrets 路径、模板成员列表、测试夹具和验证说明均已同步，避免后续看配置和日志时继续混淆。
 - 下一步：执行一轮 Codex 预设专项回归：确认 `何意味` 能在托盘菜单里被识别，确认切到海豹云后 live `config.toml` 仅海豹云使用 `http://42.192.94.176:5002`，而切到 `何意味 / RC / OpenAI Official` 后会分别恢复各自 URL，再回头继续 Explorer 预览窗格的手工复现。
 - 下一步：如果用户后续确认还要保留真正的多标签页工作流，再把 `config/chatgpt_chrome_window.ini -> window_mode` 从 `app` 切回 `window`，或补一套“app / window 双实例”切换策略。
 - 下一步：让用户现场重点复测两条：1) 同桌面下 `Alt+Space` 是否恢复到立即收起/唤起；2) 窗口留在桌面1、切到桌面2后再按 `Alt+Space` 时，是否还会误开第二个实例。若当前记忆尺寸仍表现为大窗，可先从托盘执行“重置 ChatGPT 浮窗位置/大小”，把已污染的 `735x948` 状态清回默认小窗。
