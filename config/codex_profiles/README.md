@@ -24,6 +24,6 @@
   - `heweiyi`：`model_provider=OpenAI`，并重建 `[model_providers.OpenAI]`，当前保持 URL `https://ai.websee.top`
   - `right_code`：`model_provider=OpenAI`，并重建 `[model_providers.OpenAI]`，当前保持 URL `https://ai.websee.top`
 
-`profiles.ini` 的分节顺序就是托盘菜单顺序；当前顺序为 `OpenAI Official -> 海豹云-天才程序员 -> 何一卫 -> Right Code`。
+`profiles.ini` 的分节顺序就是托盘菜单顺序；当前顺序为 `OpenAI Official -> 海豹云-天才程序员 -> 何意味 -> Right Code`。
 
 第一套 `海豹云-天才程序员` 会在脚本启动时尝试从 `%USERPROFILE%\.codex` 复制当前 live 配置初始化；其余三套需要手动放入对应的 `auth.json` 与 `config.toml` 后才会在托盘菜单里启用。

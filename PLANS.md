@@ -116,14 +116,14 @@
 - 新需求：
   - `海豹云-天才程序员` 与 `Right Code` 两套中转预设，后续都使用同一套 provider 名称：`OpenAI`。
   - `OpenAI Official` 仍保持“顶层不显式写 `model_provider`”的策略，但其 provider section 也要与模板侧统一到 `OpenAI`。
-  - 新增一套显示名为 `何一卫` 的中转预设，并按用户提供的 `OPENAI_API_KEY` 与 provider 模板初始化。
-  - 地址分配按用户 2026-06-23 的更正执行：只有 `海豹云-天才程序员` 改为 `http://42.192.94.176:5002`；`何一卫` 与 `Right Code` 保持 URL `https://ai.websee.top`；`OpenAI Official` 恢复为原先的 URL 方案，不跟随海豹云切到 IP。
+  - 新增一套显示名为 `何意味` 的中转预设，并按用户提供的 `OPENAI_API_KEY` 与 provider 模板初始化。
+  - 地址分配按用户 2026-06-23 的更正执行：只有 `海豹云-天才程序员` 改为 `http://42.192.94.176:5002`；`何意味` 与 `Right Code` 保持 URL `https://ai.websee.top`；`OpenAI Official` 恢复为原先的 URL 方案，不跟随海豹云切到 IP。
 - 当前问题：
   - `shared_template.enabled=1` 开启后，切换流程会按 `profiles.ini` 中声明的 provider patch 重建 `[model_providers.*]`，因此只改 live 或 secrets 里的单份 `config.toml` 不足以持久化。
   - 现有测试夹具与断言仍把 `custom / right_code` 视为预期值；若不一起更新，后续回归测试会全部失真。
 - 预期结果：
   - `profiles.ini`、本机 secrets、live 配置与测试预期统一到新的 `OpenAI` 命名。
-  - 新增 `何一卫` 预设后，托盘菜单与校验流程能正常识别它。
+  - 新增 `何意味` 预设后，托盘菜单与校验流程能正常识别它。
   - 共享模板同步后，各预设只保留“是否顶层写 `model_provider`”与“各自 base_url”这类最小差异，不再保留旧命名，也不会再把所有预设误写成同一个 IP。
 
 ### 实现步骤

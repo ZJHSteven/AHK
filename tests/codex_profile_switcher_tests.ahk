@@ -113,7 +113,7 @@ template_provider_wire_api=responses
 template_provider_requires_openai_auth=true
 
 [heweiyi]
-display_name=何一卫
+display_name=何意味
 auth_path=secrets\heweiyi\auth.json
 config_path=secrets\heweiyi\config.toml
 template_model_provider=OpenAI
@@ -156,7 +156,7 @@ CodexProfileTestManifestParse(root) {
     CodexProfileAssertEqual(profiles[1]["id"], "openai_official", "第一套 id")
     CodexProfileAssertEqual(profiles[2]["displayName"], "海豹云-天才程序员", "第二套中文显示名")
     CodexProfileAssertTrue(InStr(profiles[1]["authPath"], "openai_official\auth.json"), "第一套 auth 路径")
-    CodexProfileAssertEqual(profiles[3]["displayName"], "何一卫", "第三套中文显示名")
+    CodexProfileAssertEqual(profiles[3]["displayName"], "何意味", "第三套中文显示名")
     CodexProfileAssertEqual(profiles[4]["id"], "right_code", "第四套 id")
 }
 
@@ -372,9 +372,9 @@ enabled = true
     CodexProfileAssertTrue(InStr(rightCodeAfter, "[model_providers.OpenAI]"), "RC 应改写成 OpenAI provider section")
     CodexProfileAssertTrue(InStr(rightCodeAfter, quotedTransitBaseUrl), "RC 应恢复成 URL")
     CodexProfileAssertFalse(InStr(rightCodeAfter, "disable_response_storage = true"), "RC 的旧私有差异应被公共模板抹平")
-    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedOpenAIProvider), "何一卫应改写成 OpenAI 顶层 provider")
-    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedSharedModel), "何一卫应同步公共 model")
-    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedTransitBaseUrl), "何一卫应恢复成 URL")
+    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedOpenAIProvider), "何意味应改写成 OpenAI 顶层 provider")
+    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedSharedModel), "何意味应同步公共 model")
+    CodexProfileAssertTrue(InStr(heweiyiAfter, quotedTransitBaseUrl), "何意味应恢复成 URL")
 
     CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=openai_official,haibao,heweiyi,right_code`n")
     CodexProfileWriteText(root "\secrets\right_code\auth.json", "{bad json")
