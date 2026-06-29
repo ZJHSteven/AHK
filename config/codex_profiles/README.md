@@ -21,7 +21,7 @@
 - 当前四套 provider 预设的 provider 差异来自 `profiles.ini`：
   - `openai_official`：移除顶层 `model_provider`，但仍重建 `[model_providers.OpenAI]`，当前保持 URL `https://code.rpgame.net`
   - `haibao`：`model_provider=OpenAI`，并重建 `[model_providers.OpenAI]`，当前独占 IP `http://42.192.94.176:5002`
-  - `heweiyi`：`model_provider=OpenAI`，并重建 `[model_providers.OpenAI]`，当前保持 URL `https://ai.websee.top`
+  - `heyiwei`：`model_provider=OpenAI`，并重建 `[model_providers.OpenAI]`，当前保持 URL `https://ai.websee.top`
   - `right_code`：`model_provider=OpenAI`，并重建 `[model_providers.OpenAI]`，当前保持 URL `https://ai.websee.top`
 
 `profiles.ini` 的分节顺序就是托盘菜单顺序；当前顺序为 `OpenAI Official -> 海豹云-天才程序员 -> 何意味 -> Right Code`。

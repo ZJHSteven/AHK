@@ -128,7 +128,7 @@
 
 ### 实现步骤
 1. 更新 `config/codex_profiles/profiles.ini`，把中转预设的 `template_model_provider` / `template_provider_section_name` 统一改成 `OpenAI`，并补入 `何意味` 预设元数据。
-2. 同步修正本机 `config/codex_profiles/secrets/*/config.toml` 与新增 `heweiyi` secrets，使现存预设和新预设在下次切换前就处于一致结构。
+2. 同步修正本机 `config/codex_profiles/secrets/*/config.toml` 与新增 `heyiwei` secrets，使现存预设和新预设在下次切换前就处于一致结构。
 3. 补齐或更新 `auth.json` / `config.toml` 语法校验与 `tests/codex_profile_switcher_tests.ahk` 夹具，覆盖“共享模板把中转预设统一改写成 OpenAI provider”和“新增何意味预设可被识别”。
 4. 更新 `PROGRESS.md` 记录本轮 provider 命名与新预设决策，并执行 `tests\codex_profile_switcher_tests.ahk`、`main.ahk /Validate` 与 Python 配置校验，确认没有回归。
 
