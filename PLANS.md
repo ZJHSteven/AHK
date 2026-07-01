@@ -42,6 +42,15 @@
 7. 补充或更新 `tests/chatgpt_chrome_window_tests.ahk`、`tests/hotkey_help_tests.ahk`，覆盖新增配置解析、启动命令拼装和菜单构建。
 8. 运行 AHK 语法校验、相关单元测试、MCP/Chrome 端口验证，最后更新 `PROGRESS.md`。
 
+### 执行结果
+- 已完成：`D:\AppData\Chrome\Chrome-CDP\User Data` 已创建，桌面和开始菜单均已生成 `Chrome CDP 日常版.lnk`。
+- 已完成：Chrome-CDP 快捷方式已反读确认，目标为 `C:\Program Files\Google\Chrome\Application\chrome.exe`，参数包含 D 盘 User Data、`Default` Profile、`127.0.0.1:9222`、`--no-first-run`、`--no-default-browser-check`。
+- 已完成：Codex 全局 MCP 已新增 `chrome-devtools`，参数为 `npx -y chrome-devtools-mcp@latest --browser-url=http://127.0.0.1:9222`。
+- 已完成：`config/chatgpt_chrome_window.ini`、`modules/chatgpt_chrome_window.ahk`、`modules/hotkey_help.ahk` 已接入 Chrome-CDP 参数、外链路由开关和二级托盘菜单。
+- 已完成：新增 `tools/chatgpt_external_link_router.mjs`，通过 CDP openerId 只拦截 ChatGPT 页面打开的外部 http/https 链接，并转交 Firefox。
+- 已验证：Chrome 9222 端口已返回 `Chrome/149.0.7827.200`；`chrome-devtools-mcp@latest --help` 可正常执行；外链路由脚本已真实连接 9222 并识别 Firefox 路径。
+- 已验证：`tests/chatgpt_chrome_window_tests.ahk`、`tests/hotkey_help_tests.ahk`、`tests/markdown_reference_link_inliner_tests.ahk`、`tests/sandbox_bridge_tests.ahk`、`tests/codex_profile_switcher_tests.ahk`、`main.ahk /Validate`、`node --check tools/chatgpt_external_link_router.mjs` 均通过或退出码为 0。
+
 ## 2026-06-28 用 AHK 管理 Chrome 版 ChatGPT 浮动窗
 
 ### 背景
