@@ -108,13 +108,23 @@ ChatGptChromeTestBuildWindowCommand() {
     settings := Map(
         "chromePath", "C:\Program Files\Google\Chrome\Application\chrome.exe",
         "url", "https://chatgpt.com/",
+        "userDataDir", "D:\AppData\Chrome\Chrome-CDP\User Data",
         "profileDirectory", "Default",
+        "remoteDebuggingPort", 9222,
+        "remoteDebuggingAddress", "127.0.0.1",
+        "noFirstRun", true,
+        "noDefaultBrowserCheck", true,
         "windowMode", "window"
     )
     rect := Map("x", 120, "y", 80, "w", 1180, "h", 820)
     command := ChatGptChromeBuildLaunchCommand(settings, rect)
 
     ChatGptChromeAssertTrue(InStr(command, "--profile-directory=" Chr(34) "Default" Chr(34)), "window 模式应指定 Default Profile")
+    ChatGptChromeAssertTrue(InStr(command, "--user-data-dir=" Chr(34) "D:\AppData\Chrome\Chrome-CDP\User Data" Chr(34)), "window 模式应指定 D 盘 User Data")
+    ChatGptChromeAssertTrue(InStr(command, "--remote-debugging-port=9222"), "window 模式应打开 9222 调试端口")
+    ChatGptChromeAssertTrue(InStr(command, "--remote-debugging-address=" Chr(34) "127.0.0.1" Chr(34)), "window 模式应限制调试地址为本机")
+    ChatGptChromeAssertTrue(InStr(command, "--no-first-run"), "window 模式应跳过首次启动提示")
+    ChatGptChromeAssertTrue(InStr(command, "--no-default-browser-check"), "window 模式不应提示设为默认浏览器")
     ChatGptChromeAssertTrue(InStr(command, "--new-window"), "window 模式应包含 --new-window")
     ChatGptChromeAssertTrue(InStr(command, "--window-size=1180,820"), "window 模式应包含尺寸参数")
     ChatGptChromeAssertTrue(InStr(command, "--window-position=120,80"), "window 模式应包含位置参数")
@@ -125,7 +135,12 @@ ChatGptChromeTestBuildAppCommand() {
     settings := Map(
         "chromePath", "C:\Program Files\Google\Chrome\Application\chrome.exe",
         "url", "https://chatgpt.com/",
+        "userDataDir", "D:\AppData\Chrome\Chrome-CDP\User Data",
         "profileDirectory", "Default",
+        "remoteDebuggingPort", 9222,
+        "remoteDebuggingAddress", "127.0.0.1",
+        "noFirstRun", true,
+        "noDefaultBrowserCheck", true,
         "windowMode", "app"
     )
     rect := Map("x", 50, "y", 40, "w", 900, "h", 700)
@@ -165,7 +180,12 @@ ChatGptChromeTestIsWindowMinimizedHandlesInvalidHwnd() {
 ChatGptChromeTestReadSettingsFallsBackToDefaults(root) {
     settings := ChatGptChromeReadSettings(root)
     ChatGptChromeAssertEqual(settings["url"], "https://chatgpt.com/", "缺配置时应回退官方 URL")
+    ChatGptChromeAssertEqual(settings["userDataDir"], "D:\AppData\Chrome\Chrome-CDP\User Data", "缺配置时应回退 D 盘 CDP User Data")
     ChatGptChromeAssertEqual(settings["profileDirectory"], "Default", "缺配置时应回退 Default Profile")
+    ChatGptChromeAssertEqual(settings["remoteDebuggingPort"], 9222, "缺配置时应回退 9222 调试端口")
+    ChatGptChromeAssertEqual(settings["remoteDebuggingAddress"], "127.0.0.1", "缺配置时应回退本机调试地址")
+    ChatGptChromeAssertTrue(settings["noFirstRun"], "缺配置时应默认跳过首次启动提示")
+    ChatGptChromeAssertTrue(settings["noDefaultBrowserCheck"], "缺配置时应默认不检查默认浏览器")
     ChatGptChromeAssertEqual(settings["windowMode"], "app", "缺配置时应回退 app 小窗模式")
     ChatGptChromeAssertEqual(settings["defaultWidth"], 540, "缺配置时应回退默认宽度")
     ChatGptChromeAssertEqual(settings["defaultHeight"], 760, "缺配置时应回退默认高度")
@@ -180,7 +200,12 @@ ChatGptChromeTestReadSettingsRespectsConfig(root) {
 [launch]
 url=https://chatgpt.com/g/g-123-demo
 chrome_path=C:\Tools\Chrome\chrome.exe
+user_data_dir=D:\CustomChrome\User Data
 profile_directory=Default
+remote_debugging_port=9333
+remote_debugging_address=127.0.0.2
+no_first_run=0
+no_default_browser_check=0
 window_mode=app
 startup_timeout_ms=12000
 
@@ -189,17 +214,30 @@ default_width=1024
 default_height=768
 always_on_top=0
 disable_close_button=0
+
+[external_links]
+enabled=0
+firefox_path=C:\Tools\Firefox\firefox.exe
+node_path=C:\Tools\Node\node.exe
 )")
 
     settings := ChatGptChromeReadSettings(root)
     ChatGptChromeAssertEqual(settings["url"], "https://chatgpt.com/g/g-123-demo", "应读取配置中的 URL")
     ChatGptChromeAssertEqual(settings["chromePath"], "C:\Tools\Chrome\chrome.exe", "应读取配置中的 Chrome 路径")
+    ChatGptChromeAssertEqual(settings["userDataDir"], "D:\CustomChrome\User Data", "应读取配置中的 User Data 路径")
+    ChatGptChromeAssertEqual(settings["remoteDebuggingPort"], 9333, "应读取配置中的 CDP 端口")
+    ChatGptChromeAssertEqual(settings["remoteDebuggingAddress"], "127.0.0.2", "应读取配置中的 CDP 地址")
+    ChatGptChromeAssertTrue(!settings["noFirstRun"], "应读取首次启动提示开关")
+    ChatGptChromeAssertTrue(!settings["noDefaultBrowserCheck"], "应读取默认浏览器检查开关")
     ChatGptChromeAssertEqual(settings["windowMode"], "app", "应读取配置中的 app 模式")
     ChatGptChromeAssertEqual(settings["startupTimeoutMs"], 12000, "应读取配置中的超时时间")
     ChatGptChromeAssertEqual(settings["defaultWidth"], 1024, "应读取配置中的默认宽度")
     ChatGptChromeAssertEqual(settings["defaultHeight"], 768, "应读取配置中的默认高度")
     ChatGptChromeAssertTrue(!settings["alwaysOnTop"], "应读取配置中的置顶开关")
     ChatGptChromeAssertTrue(!settings["disableCloseButton"], "应读取配置中的关闭按钮开关")
+    ChatGptChromeAssertTrue(!settings["externalLinksEnabled"], "应读取外链路由开关")
+    ChatGptChromeAssertEqual(settings["firefoxPath"], "C:\Tools\Firefox\firefox.exe", "应读取 Firefox 路径")
+    ChatGptChromeAssertEqual(settings["nodePath"], "C:\Tools\Node\node.exe", "应读取 Node 路径")
 }
 
 ChatGptChromeTestResolveTargetRectIgnoresSavedRectWhenModeChanged() {

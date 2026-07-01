@@ -5,17 +5,17 @@
 ;
 ; 核心能力：
 ; 1) 用 Alt+Space 统一控制“启动 / 唤起 / 收起”。
-; 2) 复用 Chrome 默认 Profile，不新建独立 Profile。
-; 3) 默认走普通浏览器窗口模式，保留多标签页能力。
-; 4) 支持切到 app 模式，但只作为配置项保留，不默认启用。
+; 2) 使用 D 盘独立 Chrome User Data，并长期打开本机 CDP 调试端口。
+; 3) 默认走 app 小窗模式；也保留普通浏览器窗口模式作为配置项。
+; 4) 支持把 ChatGPT 浮窗打开的新外链转交给 Firefox。
 ; 5) 记住用户最后一次手动拖动/缩放后的窗口位置和大小。
 ; 6) 保持窗口置顶，尽量模拟“桌面小窗工作台”的使用手感。
 ; 7) 默认禁用右上角关闭按钮，避免误点 X 导致整个 ChatGPT 页面重开。
 ;
 ; 设计取舍：
-; - 由于用户明确要求“不要新建 Profile”，这里不能靠独立 user-data-dir
-;   来强隔离出一套完全独立的 Chrome 实例。
-; - 因此本模块采用“记录自己启动出来的那个窗口 HWND”为主，
+; - `user_data_dir` 与 `profile_directory` 是父子关系：
+;   前者是 Chrome 数据根目录，后者是该根目录里的 Profile 子目录。
+; - 本模块采用“记录自己启动出来的那个窗口 HWND”为主，
 ;   再辅以轻量启发式重新识别，尽量稳定管理同一个浮窗。
 ; - 如果用户手动把标签拖成新的窗口、或彻底关闭该窗口，下一次热键会重新启动。
 ; - 由于这是在“外部 Chrome 窗口”上做控制，而不是自己绘制一个 GUI，
@@ -29,6 +29,7 @@ global g_ChatGptChromeStateRectPolicyVersion := 2
 global g_ChatGptChromeLaunchInProgress := false
 global g_ChatGptChromeLaunchDebounceMs := 250
 global g_ChatGptChromeLastLaunchTick := 0
+global g_ChatGptChromeExternalLinkRouterPid := 0
 
 ; 模块初始化。
 ; 入参：无。
@@ -219,19 +220,27 @@ ChatGptChromeEnsureStateDirectory(root := "") {
 
 ; 读取功能配置，并把缺省值补齐。
 ; 入参：可选 root。
-; 出参：Map，包含 chromePath/url/profileDirectory/windowMode/defaultWidth/defaultHeight/startupTimeoutMs/alwaysOnTop。
+; 出参：Map，包含启动参数、窗口参数和外链路由参数。
 ChatGptChromeReadSettings(root := "") {
     configPath := ChatGptChromeConfigPath(root)
     parsedIni := ChatGptChromeReadSimpleIni(configPath)
     chromePath := ChatGptChromeIniGet(parsedIni, "launch", "chrome_path", "")
     url := ChatGptChromeIniGet(parsedIni, "launch", "url", "https://chatgpt.com/")
+    userDataDir := ChatGptChromeIniGet(parsedIni, "launch", "user_data_dir", "D:\AppData\Chrome\Chrome-CDP\User Data")
     profileDirectory := ChatGptChromeIniGet(parsedIni, "launch", "profile_directory", "Default")
+    remoteDebuggingPort := ChatGptChromeIniGet(parsedIni, "launch", "remote_debugging_port", "9222")
+    remoteDebuggingAddress := ChatGptChromeIniGet(parsedIni, "launch", "remote_debugging_address", "127.0.0.1")
+    noFirstRun := ChatGptChromeIniGet(parsedIni, "launch", "no_first_run", "1")
+    noDefaultBrowserCheck := ChatGptChromeIniGet(parsedIni, "launch", "no_default_browser_check", "1")
     windowMode := ChatGptChromeIniGet(parsedIni, "launch", "window_mode", "app")
     startupTimeoutMs := ChatGptChromeIniGet(parsedIni, "launch", "startup_timeout_ms", "8000")
     defaultWidth := ChatGptChromeIniGet(parsedIni, "window", "default_width", "540")
     defaultHeight := ChatGptChromeIniGet(parsedIni, "window", "default_height", "760")
     alwaysOnTop := ChatGptChromeIniGet(parsedIni, "window", "always_on_top", "1")
     disableCloseButton := ChatGptChromeIniGet(parsedIni, "window", "disable_close_button", "1")
+    externalLinksEnabled := ChatGptChromeIniGet(parsedIni, "external_links", "enabled", "1")
+    firefoxPath := ChatGptChromeIniGet(parsedIni, "external_links", "firefox_path", "")
+    nodePath := ChatGptChromeIniGet(parsedIni, "external_links", "node_path", "")
 
     chromePath := Trim(chromePath, " `t`r`n")
     if (chromePath = "") {
@@ -241,13 +250,21 @@ ChatGptChromeReadSettings(root := "") {
     return Map(
         "chromePath", chromePath,
         "url", Trim(url, " `t`r`n"),
+        "userDataDir", Trim(userDataDir, " `t`r`n"),
         "profileDirectory", Trim(profileDirectory, " `t`r`n"),
+        "remoteDebuggingPort", ChatGptChromeParseNonNegativeInt(remoteDebuggingPort, 9222),
+        "remoteDebuggingAddress", Trim(remoteDebuggingAddress, " `t`r`n"),
+        "noFirstRun", ChatGptChromeParseIniBool(noFirstRun, true),
+        "noDefaultBrowserCheck", ChatGptChromeParseIniBool(noDefaultBrowserCheck, true),
         "windowMode", ChatGptChromeNormalizeWindowMode(windowMode),
         "startupTimeoutMs", ChatGptChromeParsePositiveInt(startupTimeoutMs, 8000),
         "defaultWidth", ChatGptChromeParsePositiveInt(defaultWidth, 540),
         "defaultHeight", ChatGptChromeParsePositiveInt(defaultHeight, 760),
         "alwaysOnTop", ChatGptChromeParseIniBool(alwaysOnTop, true),
-        "disableCloseButton", ChatGptChromeParseIniBool(disableCloseButton, true)
+        "disableCloseButton", ChatGptChromeParseIniBool(disableCloseButton, true),
+        "externalLinksEnabled", ChatGptChromeParseIniBool(externalLinksEnabled, true),
+        "firefoxPath", Trim(firefoxPath, " `t`r`n"),
+        "nodePath", Trim(nodePath, " `t`r`n")
     )
 }
 
@@ -364,6 +381,24 @@ ChatGptChromeParsePositiveInt(valueText, defaultValue) {
 
     value := Integer(trimmed)
     return (value > 0) ? value : defaultValue
+}
+
+; 把文本解析成非负整数。
+; 入参：
+; - valueText：原始文本。
+; - defaultValue：非法值回退默认值。
+; 出参：大于等于 0 的整数。
+; 说明：
+; - 用于 CDP 端口这类配置；
+; - `0` 代表“不要主动追加这个端口参数”，方便后续临时关闭调试口。
+ChatGptChromeParseNonNegativeInt(valueText, defaultValue) {
+    trimmed := Trim(valueText, " `t`r`n")
+    if (trimmed = "" || !RegExMatch(trimmed, "^-?\d+$")) {
+        return defaultValue
+    }
+
+    value := Integer(trimmed)
+    return (value >= 0) ? value : defaultValue
 }
 
 ; 自动探测 Chrome 安装路径。
@@ -793,9 +828,27 @@ ChatGptChromeLaunchManagedWindow(settings) {
 ; 出参：完整命令行字符串。
 ChatGptChromeBuildLaunchCommand(settings, rect) {
     command := ChatGptChromeQuoteStandaloneArg(settings["chromePath"])
-        . " --profile-directory=" ChatGptChromeQuoteSwitchValue(settings["profileDirectory"])
         . " --window-size=" rect["w"] "," rect["h"]
         . " --window-position=" rect["x"] "," rect["y"]
+
+    if (settings["userDataDir"] != "") {
+        command .= " --user-data-dir=" ChatGptChromeQuoteSwitchValue(settings["userDataDir"])
+    }
+    if (settings["profileDirectory"] != "") {
+        command .= " --profile-directory=" ChatGptChromeQuoteSwitchValue(settings["profileDirectory"])
+    }
+    if (settings["remoteDebuggingPort"] > 0) {
+        command .= " --remote-debugging-port=" settings["remoteDebuggingPort"]
+    }
+    if (settings["remoteDebuggingAddress"] != "") {
+        command .= " --remote-debugging-address=" ChatGptChromeQuoteSwitchValue(settings["remoteDebuggingAddress"])
+    }
+    if settings["noFirstRun"] {
+        command .= " --no-first-run"
+    }
+    if settings["noDefaultBrowserCheck"] {
+        command .= " --no-default-browser-check"
+    }
 
     if (settings["windowMode"] = "app") {
         command .= " --app=" ChatGptChromeQuoteSwitchValue(settings["url"])
