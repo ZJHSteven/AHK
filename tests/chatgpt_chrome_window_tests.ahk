@@ -29,7 +29,11 @@ ChatGptChromeRunAllTests() {
     root := A_Temp "\ahk_chatgpt_chrome_window_tests_" A_TickCount
     try {
         ChatGptChromeTestModeNormalization()
+        ChatGptChromeTestNonNegativeIntParsing()
         ChatGptChromeTestLaunchDebounce()
+        ChatGptChromeTestExternalLinkRouterPath(root)
+        ChatGptChromeTestBuildTrayMenuCanRun()
+        ChatGptChromeTestExternalRouterDisabledDoesNotStart()
         ChatGptChromeTestBrowserTitleHeuristics()
         ChatGptChromeTestDesktopRecallGate()
         ChatGptChromeTestBuildWindowCommand()
@@ -82,11 +86,34 @@ ChatGptChromeTestModeNormalization() {
     ChatGptChromeAssertEqual(ChatGptChromeNormalizeWindowMode("weird"), "window", "非法模式应回退为 window")
 }
 
+ChatGptChromeTestNonNegativeIntParsing() {
+    ChatGptChromeAssertEqual(ChatGptChromeParseNonNegativeInt("9222", 1), 9222, "端口数字应正常解析")
+    ChatGptChromeAssertEqual(ChatGptChromeParseNonNegativeInt("0", 1), 0, "0 应允许用于关闭端口参数")
+    ChatGptChromeAssertEqual(ChatGptChromeParseNonNegativeInt("-1", 9222), 9222, "负数应回退默认端口")
+    ChatGptChromeAssertEqual(ChatGptChromeParseNonNegativeInt("abc", 9222), 9222, "非数字应回退默认端口")
+}
+
 ChatGptChromeTestLaunchDebounce() {
     ChatGptChromeAssertTrue(ChatGptChromeCanStartNewLaunch(5000, 0, false, 1200), "首次启动请求应允许")
     ChatGptChromeAssertTrue(!ChatGptChromeCanStartNewLaunch(5500, 5000, false, 1200), "防抖窗口内不应重复启动")
     ChatGptChromeAssertTrue(!ChatGptChromeCanStartNewLaunch(7000, 5000, true, 1200), "上一轮启动未完成时不应重复启动")
     ChatGptChromeAssertTrue(ChatGptChromeCanStartNewLaunch(7001, 5000, false, 1200), "超过防抖时间后应允许再次启动")
+}
+
+ChatGptChromeTestExternalLinkRouterPath(root) {
+    expected := root "\tools\chatgpt_external_link_router.mjs"
+    ChatGptChromeAssertEqual(ChatGptChromeExternalLinkRouterPath(root), expected, "外链路由脚本路径应位于 tools 目录")
+}
+
+ChatGptChromeTestBuildTrayMenuCanRun() {
+    trayMenu := ChatGptChromeBuildTrayMenu()
+    ChatGptChromeAssertTrue(IsObject(trayMenu), "ChatGPT 浮窗托盘子菜单应能构造")
+}
+
+ChatGptChromeTestExternalRouterDisabledDoesNotStart() {
+    result := ChatGptChromeStartExternalLinkRouter(Map("externalLinksEnabled", false))
+    ChatGptChromeAssertTrue(!result["ok"], "外链路由关闭时不应启动")
+    ChatGptChromeAssertTrue(InStr(result["message"], "配置中关闭") > 0, "外链路由关闭时应给出明确提示")
 }
 
 ChatGptChromeTestBrowserTitleHeuristics() {
