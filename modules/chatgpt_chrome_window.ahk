@@ -70,6 +70,7 @@ ChatGptChromeToggleWindow() {
         Toast("未找到 Chrome，可在 config\\chatgpt_chrome_window.ini 里手动填写 chrome_path。", 2600)
         return
     }
+    ChatGptChromeEnsureExternalLinkRouter(settings)
 
     hwnd := ChatGptChromeResolveManagedWindow()
     if hwnd {
@@ -1305,6 +1306,23 @@ ChatGptChromeExternalLinkRouterPath(root := "") {
 ChatGptChromeStartExternalLinkRouterFromTray(*) {
     result := ChatGptChromeStartExternalLinkRouter(ChatGptChromeReadSettings())
     Toast(result["message"], result["ok"] ? 1800 : 3200)
+}
+
+; 确保外链转 Firefox 路由器已经运行。
+; 入参：settings。
+; 出参：无。
+; 说明：
+; - 这是热键/托盘切换浮窗时的轻量守护；
+; - 如果已经运行，`ChatGptChromeStartExternalLinkRouter()` 会直接返回成功，不会重复启动。
+ChatGptChromeEnsureExternalLinkRouter(settings) {
+    if !settings["externalLinksEnabled"] {
+        return
+    }
+
+    result := ChatGptChromeStartExternalLinkRouter(settings)
+    if !result["ok"] {
+        Toast(result["message"], 3200)
+    }
 }
 
 ; 托盘回调：停止外链转 Firefox 路由器。
