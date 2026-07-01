@@ -1,5 +1,47 @@
 # ExecPlan
 
+## 2026-07-01 Chrome-CDP 日常入口、DevTools MCP 与 ChatGPT 浮窗外链路由
+
+### 背景
+- 用户已经确认前置方案：日常开发用 Chrome 走独立 `User Data` 目录，并长期打开本机 CDP 调试端口，方便 Codex、MCP、脚本和 AHK 随时接入。
+- 新的 Chrome 数据目录放在 D 盘，避免挤占 C 盘；默认浏览器仍保持 Firefox，不让 Chrome 反复提示设为默认浏览器。
+- ChatGPT Chrome 浮窗继续用 AHK 管理，但要把托盘菜单从一级平铺整理成二级菜单，并为后续“外链打开到 Firefox”留出明确入口。
+
+### 预期结果
+- 创建稳定目录：`D:\AppData\Chrome\Chrome-CDP\User Data`。
+- 创建两个用户入口：
+  - 桌面快捷方式：`Chrome CDP 日常版.lnk`。
+  - 开始菜单快捷方式：`Chrome CDP 日常版.lnk`。
+- 快捷方式启动 Chrome 时固定携带：
+  - `--user-data-dir="D:\AppData\Chrome\Chrome-CDP\User Data"`；
+  - `--profile-directory="Default"`；
+  - `--remote-debugging-port=9222`；
+  - `--remote-debugging-address=127.0.0.1`；
+  - `--no-first-run`；
+  - `--no-default-browser-check`。
+- Codex 安装 `chrome-devtools` MCP，优先连接 `http://127.0.0.1:9222`，而不是依赖临时授权式 `autoConnect`。
+- AHK 的 ChatGPT 浮窗启动命令同样使用 D 盘 Chrome-CDP 数据目录和 9222 调试端口，确保浮窗与日常 Chrome-CDP 会话一致。
+- AHK 托盘菜单整理为：
+  - `查看热键`
+  - `ChatGPT 浮窗 >`
+  - `Codex 配置 >`
+  - AHK 标准菜单项
+- 外链转 Firefox 先按“可配置、可关闭、最小误伤”的方向落地：只给 ChatGPT 浮窗新增独立开关与脚本入口，不写成全局关闭所有非 ChatGPT Chrome 页面的危险规则。
+
+### 实现步骤
+1. 只读确认当前 Chrome 路径、版本、Codex MCP 配置和 AHK 仓库状态；保护用户已有未提交改动。
+2. 写入 D 盘 Chrome-CDP 快捷方式，并验证快捷方式目标参数正确。
+3. 通过 `codex mcp add` 或等效 `config.toml` 配置安装 `chrome-devtools` MCP，并用本机 `http://127.0.0.1:9222/json/version` 验证 CDP 端口。
+4. 更新 `config/chatgpt_chrome_window.ini`，新增 `user_data_dir`、`remote_debugging_port`、`remote_debugging_address`、`no_first_run`、`no_default_browser_check`、`external_links_to_firefox` 等配置。
+5. 更新 `modules/chatgpt_chrome_window.ahk`：
+   - 读取新增配置；
+   - 启动命令带上 Chrome-CDP 数据目录和调试端口；
+   - 预留外链路由脚本启动/停止接口；
+   - 增加关闭当前浮窗与关闭全部候选浮窗的托盘入口。
+6. 更新 `modules/hotkey_help.ahk`，把托盘菜单整理成二级菜单。
+7. 补充或更新 `tests/chatgpt_chrome_window_tests.ahk`、`tests/hotkey_help_tests.ahk`，覆盖新增配置解析、启动命令拼装和菜单构建。
+8. 运行 AHK 语法校验、相关单元测试、MCP/Chrome 端口验证，最后更新 `PROGRESS.md`。
+
 ## 2026-06-28 用 AHK 管理 Chrome 版 ChatGPT 浮动窗
 
 ### 背景
