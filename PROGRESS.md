@@ -1,6 +1,13 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 现状：Chrome-CDP 日常入口已落地到 D 盘独立数据目录 `D:\AppData\Chrome\Chrome-CDP\User Data`；桌面和开始菜单均已创建 `Chrome CDP 日常版.lnk`，启动参数固定包含 `--user-data-dir`、`--profile-directory="Default"`、`--remote-debugging-port=9222`、`--remote-debugging-address=127.0.0.1`、`--no-first-run`、`--no-default-browser-check`。
+- 已完成：Codex 全局 MCP 已新增 `chrome-devtools`，配置为 `npx -y chrome-devtools-mcp@latest --browser-url=http://127.0.0.1:9222`；`codex mcp list` 已能看到该 server 处于 enabled 状态。注意：当前已经打开的 Codex 线程不一定立刻暴露新 MCP tools，通常需要新线程/重启后才会进入当前工具面。
+- 已完成：`config/chatgpt_chrome_window.ini` 已改为使用 D 盘 Chrome-CDP User Data，并默认启用 9222 CDP 端口与外链转 Firefox 开关；`ChatGptChromeBuildLaunchCommand()` 现在会把这些 Chrome-CDP 参数写入浮窗启动命令。
+- 已完成：AHK 托盘菜单已从一级平铺整理为 `查看热键`、`ChatGPT 浮窗 >`、`Codex 配置 >`、标准菜单项；`ChatGPT 浮窗` 子菜单包含显示/切换、关闭当前、关闭全部候选、重置位置/大小、启动/停止外链转 Firefox。
+- 已完成：新增 `tools/chatgpt_external_link_router.mjs`。该脚本通过 CDP browser websocket 监听新 page target，只处理 opener 是 ChatGPT target 的 http/https 外链；转发到 Firefox 后关闭 Chrome 里的新 target，避免 app 模式下链接开到看不见的 Chrome 窗口/标签。
+- 已验证：`http://127.0.0.1:9222/json/version` 已返回 `Chrome/149.0.7827.200` 与 browser websocket；`npx -y chrome-devtools-mcp@latest --help` 可正常显示 `--browserUrl/--autoConnect` 等参数；外链路由脚本已做 2 秒真实连接冒烟，能连上 Chrome CDP 并识别 Firefox 路径 `C:\Program Files\Mozilla Firefox\firefox.exe`。
+- 已验证：本轮完整回归包括 `tests/chatgpt_chrome_window_tests.ahk` 78 项通过、`tests/hotkey_help_tests.ahk` 10 项通过、`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过、`tests/sandbox_bridge_tests.ahk` 退出码 0、`tests/codex_profile_switcher_tests.ahk` 退出码 0、`main.ahk /Validate` 通过、`node --check tools/chatgpt_external_link_router.mjs` 通过。
 - 已定位：用户这次说的“Alt+Space 明显慢半拍”，主因不是 Chrome 本身，而是之前把虚拟桌面 helper 放进了热键主路径。那条链路会同步启动 PowerShell，并用 `Add-Type` 临时编译一段 C# 去调用 Windows 虚拟桌面 COM 接口；对热键小工具来说这条路径太重，确实会拖慢体感。
 - 已完成：虚拟桌面 helper 已从 ChatGPT 浮窗模块里完全移除；现在 `ChatGptChromeToggleWindow()` 的常规热路径只走本地窗口判断与 hide/show 召回，不再依赖任何 PowerShell + C# 桥接层。
 - 已完成：新增 `ChatGptChromeHandleExistingWindow()` 收口“已有实例”的处理逻辑。现在只要旧 `hwnd` 还活着，就只会被隐藏、恢复、尝试召回，或在失败时明确提示；不会再因为跨桌面接管失败而被 `ForgetManagedWindow()` 清掉，再误判成“没有窗口”去新开第二个实例。
@@ -90,6 +97,12 @@
   原因：在没有设计好多窗口交互模型之前，允许出现第二个但又不能保证每个窗口都受快捷键掌控，只会制造不可预测状态；这比暂时不支持多窗更差。
 - 决策Q：跨虚拟桌面优先做“同一实例跟随/搬运”，而不是“当前桌面看不见就新开一份”。
   原因：用户已经明确确认这不是多窗口设计需求，而是当前桌面可见性误导了实例判断；因此修复方向应该是保持单实例并移动它，而不是继续扩展多实例分支。
+- 决策R：Chrome-CDP 日常入口使用 D 盘独立 User Data + 固定 `127.0.0.1:9222`，不把原始 Chrome 默认数据目录直接拿来开远程调试。
+  原因：Chrome 136 之后默认数据目录受远程调试限制；独立目录既符合安全边界，也方便 Codex MCP、AHK 和普通 CDP 脚本稳定连接。
+- 决策S：Chrome DevTools MCP 采用 `--browser-url=http://127.0.0.1:9222`，暂不采用 `--autoConnect` 作为主路径。
+  原因：`--autoConnect` 更适合临时授权接管现有 Chrome；本项目要的是日常长期可预测的后台调试入口，固定本机端口更适合脚本化。
+- 决策T：ChatGPT 外链转 Firefox 通过独立 CDP Node 脚本实现，而不是写成 Chrome 全局规则。
+  原因：同一个 Chrome-CDP profile 里可能存在普通浏览窗口；只有 opener 是 ChatGPT target 的新页面才应该被转发，避免误关用户自己打开的普通 Chrome 页面。
 
 ## 常见坑 / 复现方法
 - 坑1：切换 Codex 配置后，已经打开的 Codex 终端通常不会自动重新读取配置；需要关闭并重新打开终端。
@@ -108,3 +121,6 @@
 - 坑10：当前默认已切到 `app`；如果之后又想保留多个标签页，需要把 `config/chatgpt_chrome_window.ini` 里的 `window_mode` 改回 `window`，否则标签页能力会继续受限。这是 Chrome 启动模式本身的取舍，不是 AHK 逻辑 bug。
 - 坑11：旧的 `logs/chatgpt_chrome_window_state.ini` 可能仍保留历史大窗的 `x/y/w/h`；但只要里面的 `rect_policy_version` 还不是当前值，这些旧尺寸就会被自动忽略。这是预期行为，不代表状态迁移失效。
 - 坑12：当前这轮修复的目标是“防止失控重复开窗并修正 Alt+Space 切换语义”，不是“让窗口自动跨虚拟桌面迁移”。如果用户把浮窗留在别的虚拟桌面，本轮代码会尽量不再新开重复窗，但不保证它会像某些原生 App 一样自动跟桌面切换。
+- 坑13：安装 `chrome-devtools` MCP 后，`codex mcp list` 能证明配置已落盘，但当前已经运行的 Codex 线程不一定马上出现新 MCP tools；需要新开线程或重启 Codex 后再看当前工具面。
+- 坑14：外链转 Firefox 依赖 Chrome-CDP 端口已打开；如果 `http://127.0.0.1:9222/json/version` 连接被拒绝，先从桌面或开始菜单启动 `Chrome CDP 日常版`，不要从旧的 Chrome 原始快捷方式启动。
+- 坑15：`tools/chatgpt_external_link_router.mjs` 只转发 opener 是 ChatGPT target 的 http/https 外链；如果某个链接不是由 ChatGPT 页面打开，或 Chrome 没有提供 openerId，它不会被转发。这是防误伤设计，不是脚本漏处理。
