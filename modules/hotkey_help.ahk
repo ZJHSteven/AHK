@@ -129,12 +129,24 @@ AhkToolkitInitializeTrayMenu(root := "", liveDir := "") {
 
     A_TrayMenu.Add()
     A_TrayMenu.Add("查看热键", HotkeyHelpShowWindow)
-    A_TrayMenu.Add("Codex 预设", CodexProfilesBuildTrayMenu(root, liveDir))
-    A_TrayMenu.Add("显示或切换 ChatGPT 浮窗", ChatGptChromeToggleWindowFromTray)
-    A_TrayMenu.Add("重置 ChatGPT 浮窗位置/大小", ChatGptChromeResetWindowPlacementFromTray)
-    A_TrayMenu.Add("彻底关闭 ChatGPT 浮窗", ChatGptChromeForceCloseFromTray)
-    A_TrayMenu.Add("打开 Codex 预设目录", CodexProfilesOpenRoot)
-    A_TrayMenu.Add("校验 Codex 预设", CodexProfilesValidateAllFromTray)
+    A_TrayMenu.Add("ChatGPT 浮窗", ChatGptChromeBuildTrayMenu())
+    A_TrayMenu.Add("Codex 配置", HotkeyHelpBuildCodexConfigTrayMenu(root, liveDir))
     A_TrayMenu.Add()
     A_TrayMenu.AddStandard()
+}
+
+; 构造 Codex 配置托盘子菜单。
+; 入参：
+; - root：Codex 预设根目录。
+; - liveDir：Codex live 目录。
+; 出参：AutoHotkey Menu 对象。
+; 说明：
+; - 原先“Codex 预设 / 打开目录 / 校验预设”都平铺在一级菜单；
+; - 这里收进 `Codex 配置` 二级菜单，减少托盘主菜单长度。
+HotkeyHelpBuildCodexConfigTrayMenu(root, liveDir) {
+    trayMenu := Menu()
+    trayMenu.Add("切换预设", CodexProfilesBuildTrayMenu(root, liveDir))
+    trayMenu.Add("校验预设", CodexProfilesValidateAllFromTray)
+    trayMenu.Add("打开预设目录", CodexProfilesOpenRoot)
+    return trayMenu
 }

@@ -1245,6 +1245,143 @@ ChatGptChromeForceCloseFromTray(*) {
     Toast("已彻底关闭 ChatGPT 浮窗")
 }
 
+; 从托盘菜单彻底关闭所有“像本模块管理的 ChatGPT 浮窗”的候选窗口。
+; 入参：菜单事件参数自动传入，本函数不使用。
+; 出参：无。
+; 说明：
+; - 这个入口用于现场已经出现多个 ChatGPT 浮窗候选，需要一次性收口的情况。
+; - 它只处理本模块启发式命中的候选窗口，不会遍历关闭所有普通 Chrome 窗口。
+ChatGptChromeForceCloseAllFromTray(*) {
+    state := ChatGptChromeReadState()
+    candidates := ChatGptChromeGetManagedWindowCandidates(state)
+    closedCount := 0
+
+    for _, hwnd in candidates {
+        if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+            continue
+        }
+
+        try ChatGptChromeSetCloseButtonEnabled(hwnd, true)
+        try WinClose("ahk_id " hwnd)
+        Sleep(120)
+        if ChatGptChromeIsWindowHandleUsable(hwnd) {
+            try PostMessage(0x0112, 0xF060, 0, , "ahk_id " hwnd)
+        }
+        closedCount += 1
+    }
+
+    ChatGptChromeForgetManagedWindow()
+    Toast(closedCount > 0 ? "已关闭 " closedCount " 个 ChatGPT 浮窗候选。" : "当前没有可关闭的 ChatGPT 浮窗。", 2400)
+}
+
+; 构造 ChatGPT 浮窗托盘子菜单。
+; 入参：无。
+; 出参：AutoHotkey Menu 对象。
+; 说明：
+; - 把 ChatGPT 相关命令收进二级菜单，避免主托盘菜单继续变长。
+; - “外链转 Firefox”是显式启动/停止，不在热键路径里偷偷常驻。
+ChatGptChromeBuildTrayMenu() {
+    trayMenu := Menu()
+    trayMenu.Add("显示/切换当前浮窗", ChatGptChromeToggleWindowFromTray)
+    trayMenu.Add("关闭当前浮窗", ChatGptChromeForceCloseFromTray)
+    trayMenu.Add("关闭全部浮窗候选", ChatGptChromeForceCloseAllFromTray)
+    trayMenu.Add("重置当前位置/大小", ChatGptChromeResetWindowPlacementFromTray)
+    trayMenu.Add()
+    trayMenu.Add("启动外链转 Firefox", ChatGptChromeStartExternalLinkRouterFromTray)
+    trayMenu.Add("停止外链转 Firefox", ChatGptChromeStopExternalLinkRouterFromTray)
+    return trayMenu
+}
+
+; 返回外链路由脚本路径。
+; 入参：可选 root，测试时可传临时项目根目录。
+; 出参：绝对路径。
+ChatGptChromeExternalLinkRouterPath(root := "") {
+    return ChatGptChromeProjectRoot(root) "\tools\chatgpt_external_link_router.mjs"
+}
+
+; 托盘回调：启动外链转 Firefox 路由器。
+; 入参：菜单事件参数自动传入，本函数不使用。
+; 出参：无。
+ChatGptChromeStartExternalLinkRouterFromTray(*) {
+    result := ChatGptChromeStartExternalLinkRouter(ChatGptChromeReadSettings())
+    Toast(result["message"], result["ok"] ? 1800 : 3200)
+}
+
+; 托盘回调：停止外链转 Firefox 路由器。
+; 入参：菜单事件参数自动传入，本函数不使用。
+; 出参：无。
+ChatGptChromeStopExternalLinkRouterFromTray(*) {
+    result := ChatGptChromeStopExternalLinkRouter()
+    Toast(result["message"], 1800)
+}
+
+; 启动外链转 Firefox 路由器。
+; 入参：settings。
+; 出参：Map("ok", bool, "message", 文本)。
+; 说明：
+; - 路由器是独立 Node 进程，通过 CDP 监听 Chrome 新 target；
+; - AHK 只负责按需启动/停止，不把 websocket 长连接逻辑塞进热键主路径。
+ChatGptChromeStartExternalLinkRouter(settings) {
+    global g_ChatGptChromeExternalLinkRouterPid
+
+    if !settings["externalLinksEnabled"] {
+        return Map("ok", false, "message", "外链转 Firefox 当前在配置中关闭。")
+    }
+    if ChatGptChromeIsProcessRunning(g_ChatGptChromeExternalLinkRouterPid) {
+        return Map("ok", true, "message", "外链转 Firefox 已在运行。")
+    }
+
+    scriptPath := ChatGptChromeExternalLinkRouterPath()
+    if !FileExist(scriptPath) {
+        return Map("ok", false, "message", "找不到外链路由脚本：" scriptPath)
+    }
+
+    nodePath := settings["nodePath"] != "" ? settings["nodePath"] : "node.exe"
+    browserUrl := "http://" settings["remoteDebuggingAddress"] ":" settings["remoteDebuggingPort"]
+    command := ChatGptChromeQuoteStandaloneArg(nodePath)
+        . " " ChatGptChromeQuoteStandaloneArg(scriptPath)
+        . " --browser-url=" ChatGptChromeQuoteSwitchValue(browserUrl)
+        . " --chatgpt-origin=" ChatGptChromeQuoteSwitchValue("https://chatgpt.com")
+
+    if (settings["firefoxPath"] != "") {
+        command .= " --firefox-path=" ChatGptChromeQuoteSwitchValue(settings["firefoxPath"])
+    }
+
+    try Run(command, , "Hide", &pid)
+    catch as err {
+        return Map("ok", false, "message", "启动外链路由失败：" err.Message)
+    }
+
+    g_ChatGptChromeExternalLinkRouterPid := pid
+    return Map("ok", true, "message", "已启动外链转 Firefox 路由。")
+}
+
+; 停止外链转 Firefox 路由器。
+; 入参：无。
+; 出参：Map("ok", bool, "message", 文本)。
+ChatGptChromeStopExternalLinkRouter() {
+    global g_ChatGptChromeExternalLinkRouterPid
+
+    if !ChatGptChromeIsProcessRunning(g_ChatGptChromeExternalLinkRouterPid) {
+        g_ChatGptChromeExternalLinkRouterPid := 0
+        return Map("ok", true, "message", "外链转 Firefox 当前未运行。")
+    }
+
+    try ProcessClose(g_ChatGptChromeExternalLinkRouterPid)
+    g_ChatGptChromeExternalLinkRouterPid := 0
+    return Map("ok", true, "message", "已停止外链转 Firefox 路由。")
+}
+
+; 判断某个 PID 是否仍在运行。
+; 入参：pid。
+; 出参：true / false。
+ChatGptChromeIsProcessRunning(pid) {
+    if !(pid is Integer) || (pid <= 0) {
+        return false
+    }
+    return ProcessExist(pid) != 0
+}
+
 ; 模块载入时就启动位置跟踪器。
 ; 这样 main.ahk 无需额外记住“还要初始化一次 ChatGPT 浮窗模块”。
 ChatGptChromeWindowInitialize()
