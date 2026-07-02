@@ -34,6 +34,8 @@ ChatGptChromeRunAllTests() {
         ChatGptChromeTestLaunchDebounce()
         ChatGptChromeTestExternalLinkRouterPath(root)
         ChatGptChromeTestBuildTrayMenuCanRun()
+        ChatGptChromeTestBuildWindowListMenuCanRun(root)
+        ChatGptChromeTestBuildWindowActionMenuCanRun()
         ChatGptChromeTestPerDesktopStateReadWrite(root)
         ChatGptChromeTestReadAllDesktopStates(root)
         ChatGptChromeTestDesktopMenuLabel()
@@ -119,6 +121,30 @@ ChatGptChromeTestExternalLinkRouterPath(root) {
 ChatGptChromeTestBuildTrayMenuCanRun() {
     trayMenu := ChatGptChromeBuildTrayMenu()
     ChatGptChromeAssertTrue(IsObject(trayMenu), "ChatGPT 浮窗托盘子菜单应能构造")
+}
+
+ChatGptChromeTestBuildWindowListMenuCanRun(root) {
+    ChatGptChromeWriteState(Map(
+        "desktopId", "menu-desktop",
+        "lastHwnd", 0,
+        "x", 0,
+        "y", 0,
+        "w", 0,
+        "h", 0,
+        "savedWindowMode", "app",
+        "rectPolicyVersion", 2
+    ), root, "menu-desktop")
+
+    listMenu := ChatGptChromeBuildWindowListMenu(root)
+    ChatGptChromeAssertTrue(IsObject(listMenu), "浮窗列表子菜单应能构造")
+}
+
+ChatGptChromeTestBuildWindowActionMenuCanRun() {
+    actionMenu := ChatGptChromeBuildWindowActionMenu(Map(
+        "desktopId", "menu-desktop",
+        "lastHwnd", 0
+    ))
+    ChatGptChromeAssertTrue(IsObject(actionMenu), "单个浮窗动作子菜单应能构造")
 }
 
 ChatGptChromeTestPerDesktopStateReadWrite(root) {

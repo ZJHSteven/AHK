@@ -30,6 +30,7 @@ global g_ChatGptChromeLaunchInProgress := false
 global g_ChatGptChromeLaunchDebounceMs := 250
 global g_ChatGptChromeLastLaunchTick := 0
 global g_ChatGptChromeExternalLinkRouterPid := 0
+global g_ChatGptChromeWindowListMenu := 0
 
 ; 模块初始化。
 ; 入参：无。
@@ -543,6 +544,7 @@ ChatGptChromeWriteState(state, root := "", desktopId := "") {
     IniWrite(state["h"], statePath, section, "h")
     IniWrite(state.Has("savedWindowMode") ? state["savedWindowMode"] : "", statePath, section, "window_mode")
     IniWrite(state.Has("rectPolicyVersion") ? state["rectPolicyVersion"] : g_ChatGptChromeStateRectPolicyVersion, statePath, section, "rect_policy_version")
+    ChatGptChromeRefreshWindowListMenu(root)
 }
 
 ; 清空“当前受管窗口”的句柄记忆，但保留位置/大小。
@@ -1391,19 +1393,78 @@ ChatGptChromeForceCloseAllFromTray(*) {
 ; 入参：无。
 ; 出参：AutoHotkey Menu 对象。
 ; 说明：
-; - 把 ChatGPT 相关命令收进二级菜单，避免主托盘菜单继续变长。
-; - “外链转 Firefox”是显式启动/停止，不在热键路径里偷偷常驻。
+; - 托盘里不再重复放“显示/切换”按钮，因为这个动作已经由 Alt+Space 负责；
+; - 这里只保留一个 `浮窗列表`，里面按虚拟桌面列出每个已记录浮窗；
+; - 每个浮窗下面再提供“关闭 / 不关闭”，避免菜单继续横向膨胀。
 ChatGptChromeBuildTrayMenu() {
+    global g_ChatGptChromeWindowListMenu
+
     trayMenu := Menu()
-    trayMenu.Add("显示/切换当前浮窗", ChatGptChromeToggleWindowFromTray)
-    trayMenu.Add("关闭当前桌面浮窗", ChatGptChromeForceCloseFromTray)
-    trayMenu.Add("关闭指定桌面浮窗...", ChatGptChromeShowCloseDesktopMenuFromTray)
-    trayMenu.Add("关闭全部浮窗", ChatGptChromeForceCloseAllFromTray)
-    trayMenu.Add("重置当前位置/大小", ChatGptChromeResetWindowPlacementFromTray)
-    trayMenu.Add()
-    trayMenu.Add("启动外链转 Firefox", ChatGptChromeStartExternalLinkRouterFromTray)
-    trayMenu.Add("停止外链转 Firefox", ChatGptChromeStopExternalLinkRouterFromTray)
+    g_ChatGptChromeWindowListMenu := ChatGptChromeBuildWindowListMenu()
+    trayMenu.Add("浮窗列表", g_ChatGptChromeWindowListMenu)
     return trayMenu
+}
+
+; 构造“浮窗列表”子菜单。
+; 入参：可选 root，测试时可传临时项目根目录。
+; 出参：AutoHotkey Menu 对象。
+; 说明：
+; - 这是一个真正的右箭头子菜单，不再是点击后临时 Show() 出来的弹出菜单；
+; - 菜单内容来自 `[desktop:<id>]` 状态，因此展示的是“受 AHK 管理过的浮窗”。
+ChatGptChromeBuildWindowListMenu(root := "") {
+    listMenu := Menu()
+    ChatGptChromePopulateWindowListMenu(listMenu, root)
+    return listMenu
+}
+
+; 刷新已挂载的“浮窗列表”子菜单。
+; 入参：可选 root。
+; 出参：无。
+; 说明：
+; - AHK 菜单对象不会自动根据状态文件变化重建；
+; - 所以每次状态写回后，如果托盘菜单已经存在，就现场刷新该子菜单。
+ChatGptChromeRefreshWindowListMenu(root := "") {
+    global g_ChatGptChromeWindowListMenu
+
+    if !IsObject(g_ChatGptChromeWindowListMenu) {
+        return
+    }
+
+    try g_ChatGptChromeWindowListMenu.Delete()
+    ChatGptChromePopulateWindowListMenu(g_ChatGptChromeWindowListMenu, root)
+}
+
+; 填充“浮窗列表”子菜单。
+; 入参：
+; - listMenu：要写入的 Menu 对象。
+; - root：可选项目根目录。
+; 出参：无。
+ChatGptChromePopulateWindowListMenu(listMenu, root := "") {
+    states := ChatGptChromeReadAllDesktopStates(root)
+
+    if (states.Length = 0) {
+        listMenu.Add("没有已记录的浮窗", ChatGptChromeNoopFromTray)
+        listMenu.Disable("没有已记录的浮窗")
+        return
+    }
+
+    for _, state in states {
+        listMenu.Add(ChatGptChromeBuildDesktopCloseMenuLabel(state), ChatGptChromeBuildWindowActionMenu(state))
+    }
+}
+
+; 构造某个浮窗下面的动作子菜单。
+; 入参：状态 Map。
+; 出参：AutoHotkey Menu 对象。
+; 说明：
+; - 用户要求“每个浮窗下面再悬浮一层关闭和不关闭”；
+; - 因此这里不再直接点击条目就关闭，而是让用户二次确认。
+ChatGptChromeBuildWindowActionMenu(state) {
+    actionMenu := Menu()
+    desktopId := state["desktopId"]
+    actionMenu.Add("关闭", ChatGptChromeForceCloseDesktopById.Bind(desktopId))
+    actionMenu.Add("不关闭", ChatGptChromeNoopFromTray)
+    return actionMenu
 }
 
 ; 动态显示“关闭指定桌面浮窗”菜单。
@@ -1474,7 +1535,8 @@ ChatGptChromeReadAllDesktopStates(root := "") {
 ChatGptChromeBuildDesktopCloseMenuLabel(state) {
     desktopId := state["desktopId"]
     hwnd := state["lastHwnd"]
-    title := "未运行"
+    isRunning := ChatGptChromeIsWindowHandleUsable(hwnd)
+    title := isRunning ? "未命名窗口" : "未运行"
     if ChatGptChromeIsWindowHandleUsable(hwnd) {
         try title := WinGetTitle("ahk_id " hwnd)
         catch {
@@ -1486,7 +1548,8 @@ ChatGptChromeBuildDesktopCloseMenuLabel(state) {
     }
 
     prefix := (desktopId = ChatGptChromeGetCurrentDesktopId()) ? "当前桌面 " : "桌面 "
-    return prefix ChatGptChromeShortDesktopId(desktopId) "：" title
+    statusText := isRunning ? "运行中" : "未运行"
+    return prefix ChatGptChromeShortDesktopId(desktopId) " [" statusText "]：" title
 }
 
 ; 返回桌面 ID 的短显示文本。
