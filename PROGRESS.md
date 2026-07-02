@@ -1,6 +1,12 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 现状：已补上 2026-07-01 漏掉的“按虚拟桌面隔离 ChatGPT 浮窗”能力。现在 `Alt+Space` 只解析当前虚拟桌面的浮窗状态；当前桌面没有浮窗时会新建属于该桌面的浮窗，不会再把其他虚拟桌面的浮窗抢过来当成当前实例。
+- 已完成：`logs/chatgpt_chrome_window_state.ini` 的状态结构已从单 `[window]` 扩展为按桌面保存的 `[desktop:<id>]`；旧 `[window]` 仍作为兼容来源，仅在状态文件还没有任何 `[desktop:*]` section 时读取。
+- 已完成：`ChatGPT 浮窗 >` 托盘菜单新增“关闭指定桌面浮窗...”，点击时会动态读取状态文件并列出 `当前桌面 <短ID>：<标题>` 或 `桌面 <短ID>：<标题>`；同时“关闭当前桌面浮窗”和“关闭全部浮窗”都改为按桌面状态执行。
+- 已完成：取消了昨天留下的全局单实例剪枝调用；之前的 `ChatGptChromePruneDuplicateManagedWindows()` 会把多个候选窗口收敛成一个，这与“每个虚拟桌面一个浮窗”冲突。现在多桌面多浮窗是预期行为。
+- 已验证：本机注册表当前虚拟桌面 ID 可读，探针值为 `3b6b114708c15d43a81c7a7073cc724c`；实现优先读 `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops -> CurrentVirtualDesktop`，失败时回退 `default`，不恢复慢的 PowerShell/C# helper。
+- 已验证：`tests/chatgpt_chrome_window_tests.ahk` 已增至 91 项并通过；`tests/hotkey_help_tests.ahk` 10 项通过；`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过；`tests/sandbox_bridge_tests.ahk`、`tests/codex_profile_switcher_tests.ahk`、`main.ahk /Validate`、`node --check tools/chatgpt_external_link_router.mjs` 均退出码 0。
 - 现状：Chrome-CDP 日常入口已落地到 D 盘独立数据目录 `D:\AppData\Chrome\Chrome-CDP\User Data`；桌面和开始菜单均已创建 `Chrome CDP 日常版.lnk`，启动参数固定包含 `--user-data-dir`、`--profile-directory="Default"`、`--remote-debugging-port=9222`、`--remote-debugging-address=127.0.0.1`、`--no-first-run`、`--no-default-browser-check`。
 - 已完成：Codex 全局 MCP 已新增 `chrome-devtools`，配置为 `npx -y chrome-devtools-mcp@latest --browser-url=http://127.0.0.1:9222`；`codex mcp list` 已能看到该 server 处于 enabled 状态。注意：当前已经打开的 Codex 线程不一定立刻暴露新 MCP tools，通常需要新线程/重启后才会进入当前工具面。
 - 已完成：`config/chatgpt_chrome_window.ini` 已改为使用 D 盘 Chrome-CDP User Data，并默认启用 9222 CDP 端口与外链转 Firefox 开关；`ChatGptChromeBuildLaunchCommand()` 现在会把这些 Chrome-CDP 参数写入浮窗启动命令。
@@ -103,6 +109,10 @@
   原因：`--autoConnect` 更适合临时授权接管现有 Chrome；本项目要的是日常长期可预测的后台调试入口，固定本机端口更适合脚本化。
 - 决策T：ChatGPT 外链转 Firefox 通过独立 CDP Node 脚本实现，而不是写成 Chrome 全局规则。
   原因：同一个 Chrome-CDP profile 里可能存在普通浏览窗口；只有 opener 是 ChatGPT target 的新页面才应该被转发，避免误关用户自己打开的普通 Chrome 页面。
+- 决策U：ChatGPT 浮窗改为“每个虚拟桌面一份状态”，而不是继续维持全局单实例。
+  原因：用户明确要的是虚拟桌面之间互相隔离；全局单实例会导致一个桌面的浮窗被另一个桌面抢用，也无法从菜单选择关闭某个桌面的浮窗。
+- 决策V：当前虚拟桌面 ID 优先从 Explorer 注册表读取，失败时回退 `default`。
+  原因：注册表读取足够轻量，能避开之前 PowerShell/C# helper 导致的热键慢半拍；回退值保证单桌面/读取失败时仍能按旧逻辑运行。
 
 ## 常见坑 / 复现方法
 - 坑1：切换 Codex 配置后，已经打开的 Codex 终端通常不会自动重新读取配置；需要关闭并重新打开终端。
@@ -124,3 +134,5 @@
 - 坑13：安装 `chrome-devtools` MCP 后，`codex mcp list` 能证明配置已落盘，但当前已经运行的 Codex 线程不一定马上出现新 MCP tools；需要新开线程或重启 Codex 后再看当前工具面。
 - 坑14：外链转 Firefox 依赖 Chrome-CDP 端口已打开；如果 `http://127.0.0.1:9222/json/version` 连接被拒绝，先从桌面或开始菜单启动 `Chrome CDP 日常版`，不要从旧的 Chrome 原始快捷方式启动。
 - 坑15：`tools/chatgpt_external_link_router.mjs` 只转发 opener 是 ChatGPT target 的 http/https 外链；如果某个链接不是由 ChatGPT 页面打开，或 Chrome 没有提供 openerId，它不会被转发。这是防误伤设计，不是脚本漏处理。
+- 坑16：如果某个桌面的浮窗没有出现在“关闭指定桌面浮窗...”菜单里，先确认它至少被当前脚本启动/识别并写入过 `[desktop:<id>]` 状态；手动从 Chrome 里随便开的窗口不会自动成为受管浮窗。
+- 坑17：桌面名称/编号仍未接入 Windows 内部虚拟桌面库，菜单目前显示短桌面 ID + 窗口标题。这是为了保持热键路径轻量；若以后必须显示桌面名称，再单独评估更重的虚拟桌面库。

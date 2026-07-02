@@ -33,6 +33,14 @@
 4. 新增枚举已保存桌面状态与按桌面关闭函数，构造 `关闭指定桌面浮窗` 子菜单。
 5. 补测试并运行完整 AHK 回归。
 
+### 执行结果
+- 已完成：状态读写已支持 `[desktop:<id>]`，并保留旧 `[window]` 兼容读取。
+- 已完成：`Alt+Space` 现在只管理当前虚拟桌面的浮窗；其他桌面的浮窗不会被抢来当成当前实例。
+- 已完成：托盘 `ChatGPT 浮窗 >` 已新增 `关闭指定桌面浮窗...` 动态菜单，并把关闭当前/关闭全部改成按桌面状态执行。
+- 已完成：移除热键路径中的全局单实例剪枝调用，允许每个虚拟桌面保留自己的 ChatGPT 浮窗。
+- 已验证：当前虚拟桌面 ID 可从注册表读取，本机探针值为 `3b6b114708c15d43a81c7a7073cc724c`。
+- 已验证：`tests/chatgpt_chrome_window_tests.ahk` 91 项通过，`tests/hotkey_help_tests.ahk` 10 项通过，`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过；`tests/sandbox_bridge_tests.ahk`、`tests/codex_profile_switcher_tests.ahk`、`main.ahk /Validate`、`node --check tools/chatgpt_external_link_router.mjs` 均退出码 0。
+
 ## 2026-07-01 Chrome-CDP 日常入口、DevTools MCP 与 ChatGPT 浮窗外链路由
 
 ### 背景
