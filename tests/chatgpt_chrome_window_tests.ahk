@@ -29,10 +29,14 @@ ChatGptChromeRunAllTests() {
     root := A_Temp "\ahk_chatgpt_chrome_window_tests_" A_TickCount
     try {
         ChatGptChromeTestModeNormalization()
+        ChatGptChromeTestDesktopIdNormalization()
         ChatGptChromeTestNonNegativeIntParsing()
         ChatGptChromeTestLaunchDebounce()
         ChatGptChromeTestExternalLinkRouterPath(root)
         ChatGptChromeTestBuildTrayMenuCanRun()
+        ChatGptChromeTestPerDesktopStateReadWrite(root)
+        ChatGptChromeTestReadAllDesktopStates(root)
+        ChatGptChromeTestDesktopMenuLabel()
         ChatGptChromeTestExternalRouterDisabledDoesNotStart()
         ChatGptChromeTestBrowserTitleHeuristics()
         ChatGptChromeTestDesktopRecallGate()
@@ -86,6 +90,13 @@ ChatGptChromeTestModeNormalization() {
     ChatGptChromeAssertEqual(ChatGptChromeNormalizeWindowMode("weird"), "window", "非法模式应回退为 window")
 }
 
+ChatGptChromeTestDesktopIdNormalization() {
+    ChatGptChromeAssertEqual(ChatGptChromeNormalizeDesktopId("{ABCD-1234}"), "abcd1234", "桌面 ID 应去掉符号并转小写")
+    ChatGptChromeAssertEqual(ChatGptChromeNormalizeDesktopId("  "), "default", "空桌面 ID 应回退 default")
+    ChatGptChromeAssertEqual(ChatGptChromeDesktopStateSection("ABCD-1234"), "desktop:abcd1234", "桌面状态 section 应稳定生成")
+    ChatGptChromeAssertEqual(ChatGptChromeShortDesktopId("1234567890"), "12345678", "桌面短 ID 应取前 8 位")
+}
+
 ChatGptChromeTestNonNegativeIntParsing() {
     ChatGptChromeAssertEqual(ChatGptChromeParseNonNegativeInt("9222", 1), 9222, "端口数字应正常解析")
     ChatGptChromeAssertEqual(ChatGptChromeParseNonNegativeInt("0", 1), 0, "0 应允许用于关闭端口参数")
@@ -108,6 +119,66 @@ ChatGptChromeTestExternalLinkRouterPath(root) {
 ChatGptChromeTestBuildTrayMenuCanRun() {
     trayMenu := ChatGptChromeBuildTrayMenu()
     ChatGptChromeAssertTrue(IsObject(trayMenu), "ChatGPT 浮窗托盘子菜单应能构造")
+}
+
+ChatGptChromeTestPerDesktopStateReadWrite(root) {
+    stateA := Map(
+        "desktopId", "desktop-a",
+        "lastHwnd", 111,
+        "x", 10,
+        "y", 20,
+        "w", 300,
+        "h", 400,
+        "savedWindowMode", "app",
+        "rectPolicyVersion", 2
+    )
+    stateB := Map(
+        "desktopId", "desktop-b",
+        "lastHwnd", 222,
+        "x", 50,
+        "y", 60,
+        "w", 700,
+        "h", 800,
+        "savedWindowMode", "window",
+        "rectPolicyVersion", 2
+    )
+
+    ChatGptChromeWriteState(stateA, root, "desktop-a")
+    ChatGptChromeWriteState(stateB, root, "desktop-b")
+
+    readA := ChatGptChromeReadState(root, "desktop-a")
+    readB := ChatGptChromeReadState(root, "desktop-b")
+    ChatGptChromeAssertEqual(readA["lastHwnd"], 111, "桌面 A 应读取自己的 hwnd")
+    ChatGptChromeAssertEqual(readA["x"], 10, "桌面 A 应读取自己的位置")
+    ChatGptChromeAssertEqual(readB["lastHwnd"], 222, "桌面 B 应读取自己的 hwnd")
+    ChatGptChromeAssertEqual(readB["savedWindowMode"], "window", "桌面 B 应读取自己的窗口模式")
+}
+
+ChatGptChromeTestReadAllDesktopStates(root) {
+    states := ChatGptChromeReadAllDesktopStates(root)
+    ChatGptChromeAssertTrue(states.Length >= 2, "应能枚举已写入的桌面状态")
+
+    seenA := false
+    seenB := false
+    for _, state in states {
+        if (state["desktopId"] = "desktopa") {
+            seenA := true
+        }
+        if (state["desktopId"] = "desktopb") {
+            seenB := true
+        }
+    }
+    ChatGptChromeAssertTrue(seenA, "状态枚举应包含桌面 A")
+    ChatGptChromeAssertTrue(seenB, "状态枚举应包含桌面 B")
+}
+
+ChatGptChromeTestDesktopMenuLabel() {
+    label := ChatGptChromeBuildDesktopCloseMenuLabel(Map(
+        "desktopId", "1234567890",
+        "lastHwnd", 0
+    ))
+    ChatGptChromeAssertTrue(InStr(label, "12345678") > 0, "桌面菜单标签应包含短桌面 ID")
+    ChatGptChromeAssertTrue(InStr(label, "未运行") > 0, "无 hwnd 时桌面菜单标签应说明未运行")
 }
 
 ChatGptChromeTestExternalRouterDisabledDoesNotStart() {

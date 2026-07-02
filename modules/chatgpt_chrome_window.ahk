@@ -131,7 +131,6 @@ ChatGptChromeToggleWindow() {
 ;    也绝不允许继续误判成“没窗口”然后新开第二个实例。
 ChatGptChromeHandleExistingWindow(hwnd, settings) {
     state := ChatGptChromeReadState()
-    ChatGptChromePruneDuplicateManagedWindows(hwnd, settings, state)
 
     ; 正常同桌面切换时，完全不走任何额外跨桌面桥接逻辑。
     ; 只有窗口被 Shell cloak、很像“留在别的虚拟桌面上”时，
@@ -420,18 +419,91 @@ ChatGptChromeDetectChromePath() {
     return ""
 }
 
+; 读取当前 Windows 虚拟桌面 ID。
+; 入参：无。
+; 出参：稳定的桌面 ID 字符串；读取失败时返回 `default`。
+; 说明：
+; - Windows 会把当前虚拟桌面 ID 存在 Explorer 的用户注册表键里；
+; - 这里只读注册表，不启动 PowerShell/C# helper，所以不会拖慢热键路径；
+; - 返回值不追求完整 GUID 展示，只需要在同一台机器上稳定区分桌面。
+ChatGptChromeGetCurrentDesktopId() {
+    try {
+        value := RegRead("HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops", "CurrentVirtualDesktop")
+        return ChatGptChromeNormalizeDesktopId(ChatGptChromeRegistryValueToHex(value))
+    } catch {
+        return "default"
+    }
+}
+
+; 把注册表读取值转换成十六进制字符串。
+; 入参：RegRead 返回值，可能是 Buffer，也可能是字符串。
+; 出参：十六进制/文本字符串。
+; 说明：不同 Windows/AHK 组合对 REG_BINARY 的返回类型可能不同，所以这里做兼容。
+ChatGptChromeRegistryValueToHex(value) {
+    if (value is Buffer) {
+        hex := ""
+        Loop value.Size {
+            hex .= Format("{:02x}", NumGet(value, A_Index - 1, "UChar"))
+        }
+        return hex
+    }
+    return String(value)
+}
+
+; 归一化虚拟桌面 ID。
+; 入参：原始 ID 文本。
+; 出参：只含小写字母和数字的短文本；空值回退 `default`。
+; 说明：
+; - INI section 名会使用这个 ID，因此要去掉 `{}`、空格、短横线等符号；
+; - 允许 `default` 这种非十六进制回退值，便于无虚拟桌面环境继续工作。
+ChatGptChromeNormalizeDesktopId(rawId) {
+    normalized := RegExReplace(StrLower(Trim(rawId, " `t`r`n")), "[^a-z0-9]", "")
+    return normalized != "" ? normalized : "default"
+}
+
+; 返回某个桌面对应的状态 section 名。
+; 入参：桌面 ID；留空时读取当前桌面 ID。
+; 出参：INI section 名，例如 `desktop:abc123`。
+ChatGptChromeDesktopStateSection(desktopId := "") {
+    resolvedDesktopId := desktopId != "" ? ChatGptChromeNormalizeDesktopId(desktopId) : ChatGptChromeGetCurrentDesktopId()
+    return "desktop:" resolvedDesktopId
+}
+
+; 判断状态文件是否已经包含按桌面存储的新 section。
+; 入参：状态文件路径。
+; 出参：true / false。
+; 说明：用于兼容旧 `[window]` 单实例状态；一旦写入过新结构，就不再让新桌面回退读取旧状态。
+ChatGptChromeStateHasDesktopSections(statePath) {
+    if !FileExist(statePath) {
+        return false
+    }
+    try content := FileRead(statePath, "UTF-8")
+    catch {
+        return false
+    }
+    return InStr(content, "[desktop:") > 0
+}
+
 ; 读取本地状态。
-; 入参：可选 root。
-; 出参：Map，包含 lastHwnd/x/y/w/h/hasRect/savedWindowMode/rectPolicyVersion。
-ChatGptChromeReadState(root := "") {
+; 入参：
+; - root：可选项目根目录。
+; - desktopId：可选虚拟桌面 ID；留空时读取当前桌面。
+; 出参：Map，包含 desktopId/lastHwnd/x/y/w/h/hasRect/savedWindowMode/rectPolicyVersion。
+ChatGptChromeReadState(root := "", desktopId := "") {
     statePath := ChatGptChromeStatePath(root)
-    lastHwnd := FileExist(statePath) ? IniRead(statePath, "window", "last_hwnd", "") : ""
-    x := FileExist(statePath) ? IniRead(statePath, "window", "x", "") : ""
-    y := FileExist(statePath) ? IniRead(statePath, "window", "y", "") : ""
-    w := FileExist(statePath) ? IniRead(statePath, "window", "w", "") : ""
-    h := FileExist(statePath) ? IniRead(statePath, "window", "h", "") : ""
-    savedWindowMode := FileExist(statePath) ? IniRead(statePath, "window", "window_mode", "") : ""
-    rectPolicyVersion := FileExist(statePath) ? IniRead(statePath, "window", "rect_policy_version", "") : ""
+    resolvedDesktopId := desktopId != "" ? ChatGptChromeNormalizeDesktopId(desktopId) : ChatGptChromeGetCurrentDesktopId()
+    section := ChatGptChromeDesktopStateSection(resolvedDesktopId)
+    legacySection := "window"
+    shouldReadLegacy := !ChatGptChromeStateHasDesktopSections(statePath)
+    readSection := shouldReadLegacy ? legacySection : section
+
+    lastHwnd := FileExist(statePath) ? IniRead(statePath, readSection, "last_hwnd", "") : ""
+    x := FileExist(statePath) ? IniRead(statePath, readSection, "x", "") : ""
+    y := FileExist(statePath) ? IniRead(statePath, readSection, "y", "") : ""
+    w := FileExist(statePath) ? IniRead(statePath, readSection, "w", "") : ""
+    h := FileExist(statePath) ? IniRead(statePath, readSection, "h", "") : ""
+    savedWindowMode := FileExist(statePath) ? IniRead(statePath, readSection, "window_mode", "") : ""
+    rectPolicyVersion := FileExist(statePath) ? IniRead(statePath, readSection, "rect_policy_version", "") : ""
 
     hasRect := RegExMatch(x, "^-?\d+$")
         && RegExMatch(y, "^-?\d+$")
@@ -439,6 +511,7 @@ ChatGptChromeReadState(root := "") {
         && RegExMatch(h, "^-?\d+$")
 
     return Map(
+        "desktopId", resolvedDesktopId,
         "lastHwnd", RegExMatch(lastHwnd, "^\d+$") ? Integer(lastHwnd) : 0,
         "x", hasRect ? Integer(x) : 0,
         "y", hasRect ? Integer(y) : 0,
@@ -451,18 +524,25 @@ ChatGptChromeReadState(root := "") {
 }
 
 ; 把状态写回本地 ini。
-; 入参：state Map；可选 root。
+; 入参：
+; - state：状态 Map。
+; - root：可选项目根目录。
+; - desktopId：可选虚拟桌面 ID；留空时优先使用 state["desktopId"]。
 ; 出参：无。
-ChatGptChromeWriteState(state, root := "") {
+ChatGptChromeWriteState(state, root := "", desktopId := "") {
     ChatGptChromeEnsureStateDirectory(root)
     statePath := ChatGptChromeStatePath(root)
-    IniWrite(state["lastHwnd"], statePath, "window", "last_hwnd")
-    IniWrite(state["x"], statePath, "window", "x")
-    IniWrite(state["y"], statePath, "window", "y")
-    IniWrite(state["w"], statePath, "window", "w")
-    IniWrite(state["h"], statePath, "window", "h")
-    IniWrite(state.Has("savedWindowMode") ? state["savedWindowMode"] : "", statePath, "window", "window_mode")
-    IniWrite(state.Has("rectPolicyVersion") ? state["rectPolicyVersion"] : g_ChatGptChromeStateRectPolicyVersion, statePath, "window", "rect_policy_version")
+    resolvedDesktopId := desktopId != "" ? ChatGptChromeNormalizeDesktopId(desktopId)
+        : (state.Has("desktopId") ? ChatGptChromeNormalizeDesktopId(state["desktopId"]) : ChatGptChromeGetCurrentDesktopId())
+    section := ChatGptChromeDesktopStateSection(resolvedDesktopId)
+
+    IniWrite(state["lastHwnd"], statePath, section, "last_hwnd")
+    IniWrite(state["x"], statePath, section, "x")
+    IniWrite(state["y"], statePath, section, "y")
+    IniWrite(state["w"], statePath, section, "w")
+    IniWrite(state["h"], statePath, section, "h")
+    IniWrite(state.Has("savedWindowMode") ? state["savedWindowMode"] : "", statePath, section, "window_mode")
+    IniWrite(state.Has("rectPolicyVersion") ? state["rectPolicyVersion"] : g_ChatGptChromeStateRectPolicyVersion, statePath, section, "rect_policy_version")
 }
 
 ; 清空“当前受管窗口”的句柄记忆，但保留位置/大小。
@@ -471,10 +551,10 @@ ChatGptChromeWriteState(state, root := "") {
 ; 说明：
 ; - 当窗口已经被用户或系统真正关闭后，保留旧 hwnd 只会造成后续恢复时报错。
 ; - 这里故意不删除 x/y/w/h，因为用户通常仍希望下次新开时回到原位置。
-ChatGptChromeForgetManagedWindow(root := "") {
-    state := ChatGptChromeReadState(root)
+ChatGptChromeForgetManagedWindow(root := "", desktopId := "") {
+    state := ChatGptChromeReadState(root, desktopId)
     state["lastHwnd"] := 0
-    ChatGptChromeWriteState(state, root)
+    ChatGptChromeWriteState(state, root, desktopId)
 }
 
 ; 尝试解析当前正在被本模块管理的窗口。
@@ -597,6 +677,10 @@ ChatGptChromePruneDuplicateManagedWindows(preferredHwnd, settings, state) {
 ; 2) 当前使用 app 模式时，标题往往会直接变成会话名，不再含 ` - Google Chrome`。
 ; 3) 我们自己的窗口会被设成 topmost，因此“Chrome + topmost”是很强的候选信号。
 ChatGptChromeLooksLikeManagedWindow(hwnd, state) {
+    if ChatGptChromeGetWindowCloakedReason(hwnd) != 0 {
+        return false
+    }
+
     title := ""
     try title := WinGetTitle("ahk_id " hwnd)
     catch {
@@ -1246,6 +1330,33 @@ ChatGptChromeForceCloseFromTray(*) {
     Toast("已彻底关闭 ChatGPT 浮窗")
 }
 
+; 按指定桌面 ID 关闭该桌面的 ChatGPT 浮窗。
+; 入参：
+; - desktopId：状态文件里的桌面 ID。
+; - *：兼容 AHK 菜单回调附加参数。
+; 出参：无。
+ChatGptChromeForceCloseDesktopById(desktopId, *) {
+    resolvedDesktopId := ChatGptChromeNormalizeDesktopId(desktopId)
+    state := ChatGptChromeReadState("", resolvedDesktopId)
+    hwnd := state["lastHwnd"]
+
+    if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+        ChatGptChromeForgetManagedWindow("", resolvedDesktopId)
+        Toast("该桌面没有正在运行的 ChatGPT 浮窗。")
+        return
+    }
+
+    try ChatGptChromeSetCloseButtonEnabled(hwnd, true)
+    try WinClose("ahk_id " hwnd)
+    Sleep(250)
+    if ChatGptChromeIsWindowHandleUsable(hwnd) {
+        try PostMessage(0x0112, 0xF060, 0, , "ahk_id " hwnd)
+    }
+
+    ChatGptChromeForgetManagedWindow("", resolvedDesktopId)
+    Toast("已关闭桌面 " ChatGptChromeShortDesktopId(resolvedDesktopId) " 的 ChatGPT 浮窗。", 2200)
+}
+
 ; 从托盘菜单彻底关闭所有“像本模块管理的 ChatGPT 浮窗”的候选窗口。
 ; 入参：菜单事件参数自动传入，本函数不使用。
 ; 出参：无。
@@ -1253,12 +1364,13 @@ ChatGptChromeForceCloseFromTray(*) {
 ; - 这个入口用于现场已经出现多个 ChatGPT 浮窗候选，需要一次性收口的情况。
 ; - 它只处理本模块启发式命中的候选窗口，不会遍历关闭所有普通 Chrome 窗口。
 ChatGptChromeForceCloseAllFromTray(*) {
-    state := ChatGptChromeReadState()
-    candidates := ChatGptChromeGetManagedWindowCandidates(state)
+    states := ChatGptChromeReadAllDesktopStates()
     closedCount := 0
 
-    for _, hwnd in candidates {
+    for _, state in states {
+        hwnd := state["lastHwnd"]
         if !ChatGptChromeIsWindowHandleUsable(hwnd) {
+            ChatGptChromeForgetManagedWindow("", state["desktopId"])
             continue
         }
 
@@ -1268,10 +1380,10 @@ ChatGptChromeForceCloseAllFromTray(*) {
         if ChatGptChromeIsWindowHandleUsable(hwnd) {
             try PostMessage(0x0112, 0xF060, 0, , "ahk_id " hwnd)
         }
+        ChatGptChromeForgetManagedWindow("", state["desktopId"])
         closedCount += 1
     }
 
-    ChatGptChromeForgetManagedWindow()
     Toast(closedCount > 0 ? "已关闭 " closedCount " 个 ChatGPT 浮窗候选。" : "当前没有可关闭的 ChatGPT 浮窗。", 2400)
 }
 
@@ -1284,13 +1396,105 @@ ChatGptChromeForceCloseAllFromTray(*) {
 ChatGptChromeBuildTrayMenu() {
     trayMenu := Menu()
     trayMenu.Add("显示/切换当前浮窗", ChatGptChromeToggleWindowFromTray)
-    trayMenu.Add("关闭当前浮窗", ChatGptChromeForceCloseFromTray)
-    trayMenu.Add("关闭全部浮窗候选", ChatGptChromeForceCloseAllFromTray)
+    trayMenu.Add("关闭当前桌面浮窗", ChatGptChromeForceCloseFromTray)
+    trayMenu.Add("关闭指定桌面浮窗...", ChatGptChromeShowCloseDesktopMenuFromTray)
+    trayMenu.Add("关闭全部浮窗", ChatGptChromeForceCloseAllFromTray)
     trayMenu.Add("重置当前位置/大小", ChatGptChromeResetWindowPlacementFromTray)
     trayMenu.Add()
     trayMenu.Add("启动外链转 Firefox", ChatGptChromeStartExternalLinkRouterFromTray)
     trayMenu.Add("停止外链转 Firefox", ChatGptChromeStopExternalLinkRouterFromTray)
     return trayMenu
+}
+
+; 动态显示“关闭指定桌面浮窗”菜单。
+; 入参：菜单事件参数自动传入，本函数不使用。
+; 出参：无。
+; 说明：
+; - AHK 托盘菜单初始化后不会自动刷新子菜单内容；
+; - 所以这里在用户点击时现场读取状态文件并弹出一个新的菜单。
+ChatGptChromeShowCloseDesktopMenuFromTray(*) {
+    states := ChatGptChromeReadAllDesktopStates()
+    closeMenu := Menu()
+
+    if (states.Length = 0) {
+        closeMenu.Add("没有已记录的浮窗", ChatGptChromeNoopFromTray)
+        closeMenu.Disable("没有已记录的浮窗")
+        closeMenu.Show()
+        return
+    }
+
+    for _, state in states {
+        desktopId := state["desktopId"]
+        closeMenu.Add(ChatGptChromeBuildDesktopCloseMenuLabel(state), ChatGptChromeForceCloseDesktopById.Bind(desktopId))
+    }
+    closeMenu.Show()
+}
+
+; 空菜单回调。
+; 入参：菜单事件参数自动传入，本函数不使用。
+; 出参：无。
+ChatGptChromeNoopFromTray(*) {
+}
+
+; 读取状态文件中的所有桌面状态。
+; 入参：可选 root。
+; 出参：状态 Map 数组。
+ChatGptChromeReadAllDesktopStates(root := "") {
+    statePath := ChatGptChromeStatePath(root)
+    states := []
+    if !FileExist(statePath) {
+        return states
+    }
+
+    try content := FileRead(statePath, "UTF-8")
+    catch {
+        return states
+    }
+
+    position := 1
+    while RegExMatch(content, "m)^\[desktop:([^\]]+)\]", &match, position) {
+        desktopId := ChatGptChromeNormalizeDesktopId(match[1])
+        states.Push(ChatGptChromeReadState(root, desktopId))
+        position := match.Pos + match.Len
+    }
+
+    if (states.Length = 0) {
+        legacyState := ChatGptChromeReadState(root, "default")
+        if (legacyState["lastHwnd"] != 0 || legacyState["hasRect"]) {
+            states.Push(legacyState)
+        }
+    }
+
+    return states
+}
+
+; 构造“关闭指定桌面浮窗”菜单里的单项文本。
+; 入参：状态 Map。
+; 出参：可读菜单文本。
+ChatGptChromeBuildDesktopCloseMenuLabel(state) {
+    desktopId := state["desktopId"]
+    hwnd := state["lastHwnd"]
+    title := "未运行"
+    if ChatGptChromeIsWindowHandleUsable(hwnd) {
+        try title := WinGetTitle("ahk_id " hwnd)
+        catch {
+            title := "未运行"
+        }
+    }
+    if (Trim(title, " `t`r`n") = "") {
+        title := "未命名窗口"
+    }
+
+    prefix := (desktopId = ChatGptChromeGetCurrentDesktopId()) ? "当前桌面 " : "桌面 "
+    return prefix ChatGptChromeShortDesktopId(desktopId) "：" title
+}
+
+; 返回桌面 ID 的短显示文本。
+; 入参：桌面 ID。
+; 出参：前 8 位；过短时原样返回。
+ChatGptChromeShortDesktopId(desktopId) {
+    normalized := ChatGptChromeNormalizeDesktopId(desktopId)
+    return StrLen(normalized) > 8 ? SubStr(normalized, 1, 8) : normalized
 }
 
 ; 返回外链路由脚本路径。
