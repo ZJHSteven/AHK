@@ -1,10 +1,10 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
-- 现状：ChatGPT 托盘菜单已按用户反馈进一步收敛。`ChatGPT 浮窗 >` 下现在只保留 `浮窗列表` 一个右箭头子菜单；不再显示“显示/切换当前浮窗”“关闭当前桌面浮窗”“关闭全部浮窗”等冗余按钮。
-- 已完成：`浮窗列表 > 某个桌面浮窗 > 关闭 / 不关闭` 已实现为真正的嵌套子菜单。每个浮窗项会显示当前/非当前桌面、短桌面 ID、运行状态和窗口标题。
-- 已完成：“运行中”判断标准是 HWND 是否仍然可用，也就是窗口/进程还活着；不要求窗口在前台，也不要求当前可见。窗口不可用时显示“未运行”，但仍可通过“关闭”清理该桌面的陈旧状态。
-- 已验证：本轮菜单收敛后，`tests/chatgpt_chrome_window_tests.ahk` 93 项通过，`tests/hotkey_help_tests.ahk` 10 项通过，`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过，`tests/sandbox_bridge_tests.ahk` 11 项通过，`tests/codex_profile_switcher_tests.ahk`、`main.ahk /Validate`、`node --check tools/chatgpt_external_link_router.mjs` 均退出码 0。
+- 现状：ChatGPT 托盘菜单已按最新反馈改为 `ChatGPT 浮窗 > 关闭浮窗 > 各桌面浮窗`。用户点某个桌面浮窗项会直接关闭它，不再进入第三层“关闭/不关闭”确认菜单。
+- 已完成：`ChatGPT 浮窗 >` 现在保留三个核心入口：`关闭浮窗`、`外链用 Firefox 打开：开/关`、`浮窗配置`。外链开关会写回 `config/chatgpt_chrome_window.ini` 的 `[external_links] enabled`，关闭时停止路由进程，开启时立即尝试启动路由。
+- 已完成：“运行中”判断标准仍是 HWND 是否仍然可用，也就是窗口/进程还活着；不要求窗口在前台，也不要求当前可见。窗口不可用时显示“未运行”，但仍可通过“关闭浮窗”清理该桌面的陈旧状态。
+- 已验证：本轮菜单修正后，`tests/chatgpt_chrome_window_tests.ahk` 94 项通过；旧的 `浮窗列表`、`BuildWindowListMenu`、`BuildWindowActionMenu`、`RefreshWindowListMenu` 等菜单结构文本/函数名已无残留。
 - 现状：已补上 2026-07-01 漏掉的“按虚拟桌面隔离 ChatGPT 浮窗”能力。现在 `Alt+Space` 只解析当前虚拟桌面的浮窗状态；当前桌面没有浮窗时会新建属于该桌面的浮窗，不会再把其他虚拟桌面的浮窗抢过来当成当前实例。
 - 已完成：`logs/chatgpt_chrome_window_state.ini` 的状态结构已从单 `[window]` 扩展为按桌面保存的 `[desktop:<id>]`；旧 `[window]` 仍作为兼容来源，仅在状态文件还没有任何 `[desktop:*]` section 时读取。
 - 已完成：`ChatGPT 浮窗 >` 托盘菜单新增“关闭指定桌面浮窗...”，点击时会动态读取状态文件并列出 `当前桌面 <短ID>：<标题>` 或 `桌面 <短ID>：<标题>`；同时“关闭当前桌面浮窗”和“关闭全部浮窗”都改为按桌面状态执行。
