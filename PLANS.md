@@ -23,6 +23,13 @@
 4. 补测试覆盖新菜单可构建、运行状态标签和二级子菜单构造。
 5. 运行 AHK 相关测试与主脚本语法校验。
 
+### 执行结果
+- 已完成：`ChatGPT 浮窗 >` 下已收敛为单一 `浮窗列表` 子菜单。
+- 已完成：`浮窗列表` 改为真正的右箭头子菜单；每个浮窗项下面再嵌套 `关闭 / 不关闭`。
+- 已完成：浮窗项标签显示当前/非当前桌面、短桌面 ID、运行状态和窗口标题；“运行中”按 HWND 是否仍可用判断，不要求在前台。
+- 已完成：底层关闭当前/关闭全部能力仍保留为内部函数，但不再平铺暴露到托盘菜单。
+- 已验证：`tests/chatgpt_chrome_window_tests.ahk` 93 项通过，`tests/hotkey_help_tests.ahk` 10 项通过，`tests/markdown_reference_link_inliner_tests.ahk` 23 项通过，`tests/sandbox_bridge_tests.ahk` 11 项通过；`tests/codex_profile_switcher_tests.ahk`、`main.ahk /Validate`、`node --check tools/chatgpt_external_link_router.mjs` 均退出码 0。
+
 ## 2026-07-02 ChatGPT 浮窗按虚拟桌面隔离与按桌面关闭
 
 ### 背景
