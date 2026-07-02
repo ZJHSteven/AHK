@@ -30,7 +30,7 @@ global g_ChatGptChromeLaunchInProgress := false
 global g_ChatGptChromeLaunchDebounceMs := 250
 global g_ChatGptChromeLastLaunchTick := 0
 global g_ChatGptChromeExternalLinkRouterPid := 0
-global g_ChatGptChromeWindowListMenu := 0
+global g_ChatGptChromeCloseWindowMenu := 0
 
 ; 模块初始化。
 ; 入参：无。
@@ -544,7 +544,7 @@ ChatGptChromeWriteState(state, root := "", desktopId := "") {
     IniWrite(state["h"], statePath, section, "h")
     IniWrite(state.Has("savedWindowMode") ? state["savedWindowMode"] : "", statePath, section, "window_mode")
     IniWrite(state.Has("rectPolicyVersion") ? state["rectPolicyVersion"] : g_ChatGptChromeStateRectPolicyVersion, statePath, section, "rect_policy_version")
-    ChatGptChromeRefreshWindowListMenu(root)
+    ChatGptChromeRefreshCloseWindowMenu(root)
 }
 
 ; 清空“当前受管窗口”的句柄记忆，但保留位置/大小。
@@ -1394,77 +1394,69 @@ ChatGptChromeForceCloseAllFromTray(*) {
 ; 出参：AutoHotkey Menu 对象。
 ; 说明：
 ; - 托盘里不再重复放“显示/切换”按钮，因为这个动作已经由 Alt+Space 负责；
-; - 这里只保留一个 `浮窗列表`，里面按虚拟桌面列出每个已记录浮窗；
-; - 每个浮窗下面再提供“关闭 / 不关闭”，避免菜单继续横向膨胀。
+; - `关闭浮窗` 是一个真正的右箭头子菜单，里面直接列出每个虚拟桌面的浮窗；
+; - 用户点击某个浮窗项就代表要关闭它，因此菜单保持两层结构；
+; - 外链开关和配置入口放在同一级，方便现场临时开关 Firefox 路由或手动改 INI。
 ChatGptChromeBuildTrayMenu() {
-    global g_ChatGptChromeWindowListMenu
+    global g_ChatGptChromeCloseWindowMenu
 
     trayMenu := Menu()
-    g_ChatGptChromeWindowListMenu := ChatGptChromeBuildWindowListMenu()
-    trayMenu.Add("浮窗列表", g_ChatGptChromeWindowListMenu)
+    settings := ChatGptChromeReadSettings()
+    g_ChatGptChromeCloseWindowMenu := ChatGptChromeBuildCloseWindowMenu()
+    trayMenu.Add("关闭浮窗", g_ChatGptChromeCloseWindowMenu)
+    trayMenu.Add(ChatGptChromeBuildExternalLinksToggleLabel(settings), ChatGptChromeToggleExternalLinksFromTray)
+    trayMenu.Add("浮窗配置", ChatGptChromeOpenConfigFromTray)
     return trayMenu
 }
 
-; 构造“浮窗列表”子菜单。
+; 构造“关闭浮窗”子菜单。
 ; 入参：可选 root，测试时可传临时项目根目录。
 ; 出参：AutoHotkey Menu 对象。
 ; 说明：
 ; - 这是一个真正的右箭头子菜单，不再是点击后临时 Show() 出来的弹出菜单；
-; - 菜单内容来自 `[desktop:<id>]` 状态，因此展示的是“受 AHK 管理过的浮窗”。
-ChatGptChromeBuildWindowListMenu(root := "") {
-    listMenu := Menu()
-    ChatGptChromePopulateWindowListMenu(listMenu, root)
-    return listMenu
+; - 菜单内容来自 `[desktop:<id>]` 状态，因此展示的是“受 AHK 管理过的浮窗”；
+; - 每个菜单项直接绑定关闭动作，用户不想关闭时直接移开菜单即可。
+ChatGptChromeBuildCloseWindowMenu(root := "") {
+    closeMenu := Menu()
+    ChatGptChromePopulateCloseWindowMenu(closeMenu, root)
+    return closeMenu
 }
 
-; 刷新已挂载的“浮窗列表”子菜单。
+; 刷新已挂载的“关闭浮窗”子菜单。
 ; 入参：可选 root。
 ; 出参：无。
 ; 说明：
 ; - AHK 菜单对象不会自动根据状态文件变化重建；
 ; - 所以每次状态写回后，如果托盘菜单已经存在，就现场刷新该子菜单。
-ChatGptChromeRefreshWindowListMenu(root := "") {
-    global g_ChatGptChromeWindowListMenu
+ChatGptChromeRefreshCloseWindowMenu(root := "") {
+    global g_ChatGptChromeCloseWindowMenu
 
-    if !IsObject(g_ChatGptChromeWindowListMenu) {
+    if !IsObject(g_ChatGptChromeCloseWindowMenu) {
         return
     }
 
-    try g_ChatGptChromeWindowListMenu.Delete()
-    ChatGptChromePopulateWindowListMenu(g_ChatGptChromeWindowListMenu, root)
+    try g_ChatGptChromeCloseWindowMenu.Delete()
+    ChatGptChromePopulateCloseWindowMenu(g_ChatGptChromeCloseWindowMenu, root)
 }
 
-; 填充“浮窗列表”子菜单。
+; 填充“关闭浮窗”子菜单。
 ; 入参：
-; - listMenu：要写入的 Menu 对象。
+; - closeMenu：要写入的 Menu 对象。
 ; - root：可选项目根目录。
 ; 出参：无。
-ChatGptChromePopulateWindowListMenu(listMenu, root := "") {
+ChatGptChromePopulateCloseWindowMenu(closeMenu, root := "") {
     states := ChatGptChromeReadAllDesktopStates(root)
 
     if (states.Length = 0) {
-        listMenu.Add("没有已记录的浮窗", ChatGptChromeNoopFromTray)
-        listMenu.Disable("没有已记录的浮窗")
+        closeMenu.Add("没有已记录的浮窗", ChatGptChromeNoopFromTray)
+        closeMenu.Disable("没有已记录的浮窗")
         return
     }
 
     for _, state in states {
-        listMenu.Add(ChatGptChromeBuildDesktopCloseMenuLabel(state), ChatGptChromeBuildWindowActionMenu(state))
+        desktopId := state["desktopId"]
+        closeMenu.Add(ChatGptChromeBuildDesktopCloseMenuLabel(state), ChatGptChromeForceCloseDesktopById.Bind(desktopId))
     }
-}
-
-; 构造某个浮窗下面的动作子菜单。
-; 入参：状态 Map。
-; 出参：AutoHotkey Menu 对象。
-; 说明：
-; - 用户要求“每个浮窗下面再悬浮一层关闭和不关闭”；
-; - 因此这里不再直接点击条目就关闭，而是让用户二次确认。
-ChatGptChromeBuildWindowActionMenu(state) {
-    actionMenu := Menu()
-    desktopId := state["desktopId"]
-    actionMenu.Add("关闭", ChatGptChromeForceCloseDesktopById.Bind(desktopId))
-    actionMenu.Add("不关闭", ChatGptChromeNoopFromTray)
-    return actionMenu
 }
 
 ; 动态显示“关闭指定桌面浮窗”菜单。
@@ -1495,6 +1487,53 @@ ChatGptChromeShowCloseDesktopMenuFromTray(*) {
 ; 入参：菜单事件参数自动传入，本函数不使用。
 ; 出参：无。
 ChatGptChromeNoopFromTray(*) {
+}
+
+; 构造外链 Firefox 路由开关的菜单文本。
+; 入参：settings，来自 ChatGptChromeReadSettings()。
+; 出参：形如“外链用 Firefox 打开：开/关”的菜单文本。
+ChatGptChromeBuildExternalLinksToggleLabel(settings) {
+    return "外链用 Firefox 打开：" (settings["externalLinksEnabled"] ? "开" : "关")
+}
+
+; 托盘回调：切换“外链用 Firefox 打开”配置。
+; 入参：菜单事件参数自动传入，本函数不使用。
+; 出参：无。
+; 说明：
+; - 这里写回的是功能配置文件 `config\chatgpt_chrome_window.ini`；
+; - 关闭时同时停掉当前路由进程，避免菜单显示关闭但后台还在转发；
+; - 开启时立即尝试启动路由，让用户不必再按一次热键才生效。
+ChatGptChromeToggleExternalLinksFromTray(*) {
+    settings := ChatGptChromeReadSettings()
+    nextEnabled := !settings["externalLinksEnabled"]
+    configPath := ChatGptChromeConfigPath()
+
+    try IniWrite(nextEnabled ? "1" : "0", configPath, "external_links", "enabled")
+    catch as err {
+        Toast("写入外链开关失败：" err.Message, 3200)
+        return
+    }
+
+    if nextEnabled {
+        updatedSettings := ChatGptChromeReadSettings()
+        result := ChatGptChromeStartExternalLinkRouter(updatedSettings)
+        Toast(result["message"], result["ok"] ? 1800 : 3200)
+        return
+    }
+
+    result := ChatGptChromeStopExternalLinkRouter()
+    Toast("已关闭外链转 Firefox。" (result["ok"] ? "" : " " result["message"]), 2200)
+}
+
+; 托盘回调：打开 ChatGPT 浮窗配置文件。
+; 入参：菜单事件参数自动传入，本函数不使用。
+; 出参：无。
+ChatGptChromeOpenConfigFromTray(*) {
+    configPath := ChatGptChromeConfigPath()
+    try Run(ChatGptChromeQuoteStandaloneArg(configPath))
+    catch as err {
+        Toast("打开浮窗配置失败：" err.Message, 3200)
+    }
 }
 
 ; 读取状态文件中的所有桌面状态。

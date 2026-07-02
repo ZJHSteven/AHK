@@ -34,8 +34,8 @@ ChatGptChromeRunAllTests() {
         ChatGptChromeTestLaunchDebounce()
         ChatGptChromeTestExternalLinkRouterPath(root)
         ChatGptChromeTestBuildTrayMenuCanRun()
-        ChatGptChromeTestBuildWindowListMenuCanRun(root)
-        ChatGptChromeTestBuildWindowActionMenuCanRun()
+        ChatGptChromeTestBuildCloseWindowMenuCanRun(root)
+        ChatGptChromeTestExternalLinksToggleLabel()
         ChatGptChromeTestPerDesktopStateReadWrite(root)
         ChatGptChromeTestReadAllDesktopStates(root)
         ChatGptChromeTestDesktopMenuLabel()
@@ -123,7 +123,7 @@ ChatGptChromeTestBuildTrayMenuCanRun() {
     ChatGptChromeAssertTrue(IsObject(trayMenu), "ChatGPT 浮窗托盘子菜单应能构造")
 }
 
-ChatGptChromeTestBuildWindowListMenuCanRun(root) {
+ChatGptChromeTestBuildCloseWindowMenuCanRun(root) {
     ChatGptChromeWriteState(Map(
         "desktopId", "menu-desktop",
         "lastHwnd", 0,
@@ -135,16 +135,21 @@ ChatGptChromeTestBuildWindowListMenuCanRun(root) {
         "rectPolicyVersion", 2
     ), root, "menu-desktop")
 
-    listMenu := ChatGptChromeBuildWindowListMenu(root)
-    ChatGptChromeAssertTrue(IsObject(listMenu), "浮窗列表子菜单应能构造")
+    closeMenu := ChatGptChromeBuildCloseWindowMenu(root)
+    ChatGptChromeAssertTrue(IsObject(closeMenu), "关闭浮窗子菜单应能构造")
 }
 
-ChatGptChromeTestBuildWindowActionMenuCanRun() {
-    actionMenu := ChatGptChromeBuildWindowActionMenu(Map(
-        "desktopId", "menu-desktop",
-        "lastHwnd", 0
-    ))
-    ChatGptChromeAssertTrue(IsObject(actionMenu), "单个浮窗动作子菜单应能构造")
+ChatGptChromeTestExternalLinksToggleLabel() {
+    ChatGptChromeAssertEqual(
+        ChatGptChromeBuildExternalLinksToggleLabel(Map("externalLinksEnabled", true)),
+        "外链用 Firefox 打开：开",
+        "外链开启时菜单应显示开"
+    )
+    ChatGptChromeAssertEqual(
+        ChatGptChromeBuildExternalLinksToggleLabel(Map("externalLinksEnabled", false)),
+        "外链用 Firefox 打开：关",
+        "外链关闭时菜单应显示关"
+    )
 }
 
 ChatGptChromeTestPerDesktopStateReadWrite(root) {
