@@ -1,5 +1,38 @@
 # ExecPlan
 
+## 2026-07-02 ChatGPT 浮窗按虚拟桌面隔离与按桌面关闭
+
+### 背景
+- 用户复核 2026-07-01 的实现后指出：托盘菜单虽然被收纳了，但没有真正实现先前讨论的“每个虚拟桌面一个独立 ChatGPT 浮窗，并能从托盘选择关闭某个桌面的浮窗”。
+- 现有实现仍是单 `last_hwnd` 状态，只提供“关闭当前浮窗”和“关闭全部浮窗候选”，这不满足“虚拟桌面分隔”的要求。
+- 本机注册表 `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops` 可读到 `CurrentVirtualDesktop`，因此可以用轻量注册表读取作为当前桌面标识来源，避免恢复之前拖慢热键的 PowerShell/C# helper。
+
+### 预期结果
+- `Alt+Space` 在每个虚拟桌面上只管理该桌面自己的 ChatGPT 浮窗：
+  - 当前桌面已有浮窗：显示/收起/恢复当前桌面的浮窗；
+  - 当前桌面没有浮窗：新建一个属于当前桌面的浮窗；
+  - 其他桌面已有浮窗：不抢过来，也不误认为当前桌面已有实例。
+- 状态文件支持按桌面保存窗口：
+  - 保留旧 `[window]` 作为兼容读取来源；
+  - 新增按桌面 key 存储的 `[desktop:<id>]`，分别保存 `last_hwnd/x/y/w/h/window_mode/rect_policy_version`。
+- 托盘 `ChatGPT 浮窗 >` 新增按桌面关闭入口：
+  - `关闭当前桌面浮窗`
+  - `关闭全部浮窗`
+  - `关闭指定桌面浮窗 > 桌面 <短ID>：<窗口标题>`
+- 测试覆盖：
+  - 虚拟桌面 ID 归一化；
+  - 按桌面读写状态；
+  - 当前桌面只解析自己的窗口；
+  - 按桌面关闭菜单可构建；
+  - 原有单实例/启动参数/菜单测试继续通过。
+
+### 实现步骤
+1. 增加 `ChatGptChromeGetCurrentDesktopId()`，优先读取注册表当前虚拟桌面 GUID，失败时回退到 `default`，保证非虚拟桌面环境也能工作。
+2. 将 `ChatGptChromeReadState()` / `ChatGptChromeWriteState()` 扩展为支持 `desktopId` 参数，默认使用当前桌面 ID。
+3. 将 `ChatGptChromeResolveManagedWindow()`、保存位置、重置位置、关闭当前浮窗等路径改为当前桌面状态。
+4. 新增枚举已保存桌面状态与按桌面关闭函数，构造 `关闭指定桌面浮窗` 子菜单。
+5. 补测试并运行完整 AHK 回归。
+
 ## 2026-07-01 Chrome-CDP 日常入口、DevTools MCP 与 ChatGPT 浮窗外链路由
 
 ### 背景
