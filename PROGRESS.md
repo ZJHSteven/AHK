@@ -1,6 +1,9 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 现状：已定位并修复 Codex 第 4 套 `Right Code` 预设被识别/刷新回第 3 套 `何意味` 的根因：`profiles.ini` 里两者的 `template_provider_base_url` 曾同时写成 `https://ai.websee.top`，共享模板开启后会按这个错误真源重建第 4 套配置。
+- 已完成：`right_code.template_provider_base_url` 已改为 `https://www.right.codes/codex/v1`；本机被忽略的 `secrets/right_code/config.toml` 也已同步改到该地址，避免下次切换目标预设时继续复制旧地址。
+- 已完成：`tests/codex_profile_switcher_tests.ahk` 已补断言，要求共享模板同步后 `Right Code` 使用 `https://www.right.codes/codex/v1`，且生成后的 config 不再与 `何意味` 完全相同。
 - 现状：ChatGPT 托盘菜单已按最新反馈改为 `ChatGPT 浮窗 > 关闭浮窗 > 各桌面浮窗`。用户点某个桌面浮窗项会直接关闭它，不再进入第三层“关闭/不关闭”确认菜单。
 - 已完成：`ChatGPT 浮窗 >` 现在保留三个核心入口：`关闭浮窗`、`外链用 Firefox 打开：开/关`、`浮窗配置`。外链开关会写回 `config/chatgpt_chrome_window.ini` 的 `[external_links] enabled`，关闭时停止路由进程，开启时立即尝试启动路由。
 - 已完成：“运行中”判断标准仍是 HWND 是否仍然可用，也就是窗口/进程还活着；不要求窗口在前台，也不要求当前可见。窗口不可用时显示“未运行”，但仍可通过“关闭浮窗”清理该桌面的陈旧状态。
@@ -83,8 +86,8 @@
   原因：用户实际诉求不是维护三份长期漂移的配置，而是“换 provider 不换其余内容”；因此 provider 之外的插件、MCP、marketplaces、projects、模型参数都应跟随当前 live 一起同步。
 - 决策F.1：中转 provider 的逻辑名统一使用 `OpenAI`，不再沿用 `custom / right_code`。
   原因：共享模板会按 `profiles.ini` 重建 provider block；若逻辑名不统一，live 手改后仍会在下一次切换被旧命名覆盖，用户也难以从配置表面判断几套中转其实是同一种 provider。
-- 决策F.2：只有海豹云改成 `http://42.192.94.176:5002`；`何意味` 与 `Right Code` 继续使用 `https://ai.websee.top`，`OpenAI Official` 继续保持自己的原始 URL。
-  原因：用户已明确纠正“只有海豹云用 IP”；现场探测也确认 `http://42.192.94.176:5002` 返回 `200`、`https://ai.websee.top` 返回 `200`，因此当前最稳做法是按预设逐套保留各自地址，而不是再强行统一。
+- 决策F.2：只有海豹云使用 `http://42.192.94.176:5002`；`何意味` 使用 `https://ai.websee.top`；`Right Code` 使用 `https://www.right.codes/codex/v1`；`OpenAI Official` 继续保持 `https://code.rpgame.net`。
+  原因：`profiles.ini` 是共享模板重建 provider block 的真源；如果第 3、第 4 套 URL 写成一样，刷新时就会把 `Right Code` 重新覆盖成 `何意味`，甚至因为 auth/config 完全相同导致菜单按顺序误识别为第 3 套。
 - 决策G：Codex provider 预设当前以 plain `mcp_servers.context7 / github / cloudflare-api` 为主要真源，而不是依赖同名 curated plugin 继续二次提供重复 skills/MCP。
   原因：这台机器上 Cloudflare plugin 真实结构是 `skills + .mcp.json`，GitHub plugin 真实结构是 `skills + .app.json`；而相关 skills 已迁到全局，若 plugin 与 plain MCP 同时启用，入口会重复、状态更混乱。
 - 决策H：资源管理器场景优先直接读取 Explorer 选中项，不再把“真实路径获取”完全绑定到剪贴板复制链路。

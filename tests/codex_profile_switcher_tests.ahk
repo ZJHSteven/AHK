@@ -128,7 +128,7 @@ auth_path=secrets\right_code\auth.json
 config_path=secrets\right_code\config.toml
 template_model_provider=OpenAI
 template_provider_section_name=OpenAI
-template_provider_base_url=https://ai.websee.top
+template_provider_base_url=https://www.right.codes/codex/v1
 template_provider_wire_api=responses
 template_provider_requires_openai_auth=true
     )"
@@ -297,7 +297,7 @@ model = "gpt-old-right-code"
 [model_providers]
 [model_providers.OpenAI]
 name = "OpenAI"
-base_url = "https://ai.websee.top"
+base_url = "https://legacy.right.invalid"
 wire_api = "responses"
 requires_openai_auth = true
 
@@ -357,6 +357,7 @@ enabled = true
     quotedOfficialBaseUrl := "base_url = " Chr(34) "https://code.rpgame.net" Chr(34)
     quotedHaibaoBaseUrl := "base_url = " Chr(34) "http://42.192.94.176:5002" Chr(34)
     quotedTransitBaseUrl := "base_url = " Chr(34) "https://ai.websee.top" Chr(34)
+    quotedRightCodeBaseUrl := "base_url = " Chr(34) "https://www.right.codes/codex/v1" Chr(34)
 
     CodexProfileAssertTrue(InStr(officialAfter, quotedSharedModel), "Official 应同步公共 model")
     CodexProfileAssertTrue(InStr(officialAfter, quotedSharedUpdatedAt), "Official 应同步公共 marketplace 时间戳")
@@ -370,11 +371,13 @@ enabled = true
 
     CodexProfileAssertTrue(InStr(rightCodeAfter, quotedOpenAIProvider), "RC 应改写成 OpenAI 顶层 provider")
     CodexProfileAssertTrue(InStr(rightCodeAfter, "[model_providers.OpenAI]"), "RC 应改写成 OpenAI provider section")
-    CodexProfileAssertTrue(InStr(rightCodeAfter, quotedTransitBaseUrl), "RC 应恢复成 URL")
+    CodexProfileAssertTrue(InStr(rightCodeAfter, quotedRightCodeBaseUrl), "RC 应恢复成 Right Code URL")
+    CodexProfileAssertFalse(InStr(rightCodeAfter, quotedTransitBaseUrl), "RC 不应再被何意味 URL 覆盖")
     CodexProfileAssertFalse(InStr(rightCodeAfter, "disable_response_storage = true"), "RC 的旧私有差异应被公共模板抹平")
     CodexProfileAssertTrue(InStr(heyiweiAfter, quotedOpenAIProvider), "何意味应改写成 OpenAI 顶层 provider")
     CodexProfileAssertTrue(InStr(heyiweiAfter, quotedSharedModel), "何意味应同步公共 model")
     CodexProfileAssertTrue(InStr(heyiweiAfter, quotedTransitBaseUrl), "何意味应恢复成 URL")
+    CodexProfileAssertTrue(rightCodeAfter != heyiweiAfter, "RC 与何意味生成后的 config 不应完全相同")
 
     CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=openai_official,haibao,heyiwei,right_code`n")
     CodexProfileWriteText(root "\secrets\right_code\auth.json", "{bad json")
