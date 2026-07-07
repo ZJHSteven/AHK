@@ -1,5 +1,20 @@
 # ExecPlan
 
+## 2026-07-08 Codex Right Code 预设 URL 真源修复
+
+### 背景
+- 用户反馈：通过 `Ctrl+Alt+F12` 切到第 4 套 `Right Code` 后，再打开菜单或刷新配置时，当前配置又像回到了第 3 套 `何意味 / heyiwei`。
+- 用户反馈：第 3 套和第 4 套的 `base_url` 变成一样；手动把 `Right Code` 改回正确地址后，刷新又会被改回。
+- 现场证据：`shared_template.enabled=1` 开启后，切换器会以 `config/codex_profiles/profiles.ini` 的 `template_provider_base_url` 作为真源重建 provider 块；当前 `heyiwei` 与 `right_code` 都写成 `https://ai.websee.top`。
+- 现场证据：备份里存在 `https://www.right.codes/codex/v1`，符合用户描述的 `Right Code` 手动修正地址。
+
+### 执行计划
+1. 修正 `profiles.ini` 中 `right_code.template_provider_base_url`，让共享模板重建时使用 `https://www.right.codes/codex/v1`。
+2. 同步更新 README、测试夹具和断言，明确 `heyiwei` 与 `right_code` 是两套不同 endpoint。
+3. 更新本机被忽略的 `secrets/right_code/config.toml`，避免下一次切换目标预设时仍复制旧地址。
+4. 补充或调整测试，覆盖共享模板同步后第 3、第 4 套 URL 不应相同。
+5. 运行 AHK 测试、主脚本语法校验和四套预设校验，最后更新 `PROGRESS.md`。
+
 ## 2026-07-02 ChatGPT 浮窗托盘菜单改为直接关闭
 
 ### 背景
