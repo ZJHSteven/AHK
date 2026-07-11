@@ -1,6 +1,7 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- Codex Desktop 补丁更新：AHK 主进程现在每分钟检查 `OpenAI.Codex` 的 Store 包版本；仅在版本变化后调用 `D:\Workspace\codex-desktop-patcher` 重建 stable/no-lock 副本并显示结果提示。状态文件 `config/codex_desktop_patcher_watcher.ini` 已忽略，不含认证信息。
 - 现状：已定位并修复 Codex 第 4 套 `Right Code` 预设被识别/刷新回第 3 套 `何意味` 的根因：`profiles.ini` 里两者的 `template_provider_base_url` 曾同时写成 `https://ai.websee.top`，共享模板开启后会按这个错误真源重建第 4 套配置。
 - 已完成：`right_code.template_provider_base_url` 已改为 `https://www.right.codes/codex/v1`；本机被忽略的 `secrets/right_code/config.toml` 也已同步改到该地址，避免下次切换目标预设时继续复制旧地址。
 - 已完成：`tests/codex_profile_switcher_tests.ahk` 已补断言，要求共享模板同步后 `Right Code` 使用 `https://www.right.codes/codex/v1`，且生成后的 config 不再与 `何意味` 完全相同。

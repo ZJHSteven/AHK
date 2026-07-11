@@ -12,6 +12,7 @@ SetWorkingDir A_ScriptDir
 ; ---- 引入模块 ----
 #Include modules\utils.ahk
 #Include modules\codex_profile_switcher.ahk
+#Include modules\codex_desktop_patch_watcher.ahk
 #Include modules\chatgpt_chrome_window.ahk
 #Include modules\hotkey_help.ahk
 #Include modules\hotkeys.ahk
@@ -23,6 +24,9 @@ SetWorkingDir A_ScriptDir
 ; 这里统一挂载“查看热键”和“Codex 预设切换”入口。
 ; 具体菜单内容放在独立模块里，main.ahk 只负责启动阶段组装。
 AhkToolkitInitializeTrayMenu()
+
+; 每分钟检查一次 Microsoft Store 的 Codex 包版本；只有版本变化才重建本地补丁副本。
+CodexDesktopPatchWatcherInitialize()
 
 ; ---- 启动监听：每 100ms 扫描一次，简单直接 ----
 ;StartSandboxWatch()

@@ -10,3 +10,4 @@ config/codex_profiles/state.ini
 
 # 本机诊断日志可能包含窗口标题、文件路径等个人环境信息，只用于排障。
 logs/
+config/codex_desktop_patcher_watcher.ini
