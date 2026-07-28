@@ -1,5 +1,21 @@
 # ExecPlan
 
+## 2026-07-28 Codex Desktop watcher 状态与重复检查修复
+
+### 背景
+
+- Store 当前版本已是 `26.721.4979.0`，但本项目 `runtime/state.json` 与实际稳定版 / no-lock 副本仍停留在 `26.707.3748.0`。
+- AHK watcher 在 `last_built_version` 为空时直接写入当前版本并返回，没有执行构建；因此首次初始化会产生“状态已最新、产物却不存在”的假成功。
+- 旧的 `CodexHistoryAllProvidersPatchWatcher` 仍在用户 Run 自启动项中，与 AHK 的一分钟 watcher 并行运行，造成两套补丁维护机制重叠。
+
+### 执行计划
+
+1. 为 watcher 提取“指定版本的 stable/no-lock 产物是否完整”的纯检查函数，并补最小文件系统边界测试。
+2. 将首次初始化改为构建；仅当构建退出成功且两个变体的 exe / ASAR 均存在时才写 `last_built_version`。
+3. 当状态版本等于 Store 版本但产物缺失时，自动触发一次强制重建，而不是继续静默跳过。
+4. 停用旧 Run 自启动 watcher，保留其文件和历史备份，不删除旧补丁目录。
+5. 用 AHK 自动化测试、主脚本语法校验、构建脚本实测和状态文件回读完成验收。
+
 ## 2026-07-08 Codex Right Code 预设 URL 真源修复
 
 ### 背景
