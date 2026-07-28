@@ -1,6 +1,7 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 已定位并修复：Watch 反复构建失败的直接原因是它用 Windows PowerShell 5.1 读取 UTF-8 无 BOM 的 `Build-CodexDesktop.ps1`，中文文本被按旧代码页解码并触发 `UnexpectedToken`；构建入口现已明确改用 `C:\Program Files\PowerShell\7\pwsh.exe`。
 - 已完成：Codex Desktop watcher 新增独立日志 `logs/codex_desktop_patch_watcher.log`；同一版本构建失败后会退避 30 分钟，完全相同的错误只提示一次，不再每分钟重复构建和弹窗。
 - 已验证：失败退避新增边界测试，覆盖首次失败提示、同错误去重、新版本不继承退避、30 分钟后恢复重试；watcher 专项测试与 `main.ahk /Validate` 均退出码 0。
 - Codex Desktop 补丁更新：AHK 主进程现在每分钟检查 `OpenAI.Codex` 的 Store 包版本；只有“状态版本相同且当前版本的 stable/no-lock 两个 exe/ASAR 都存在”才跳过。首次运行、版本变化或状态领先于产物时都会构建，且构建返回 0 后仍要验证四个文件才写入 `last_built_version` 和提示。

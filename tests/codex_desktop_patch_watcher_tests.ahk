@@ -7,6 +7,9 @@ version := CodexDesktopPatchWatcherGetInstalledVersion()
 if !RegExMatch(version, "^\d+\.\d+\.\d+\.\d+$") {
     throw Error("未获得有效 OpenAI.Codex Store 版本：" version)
 }
+if !FileExist(g_CodexDesktopPatchPowerShellPath) {
+    throw Error("watcher 指定的 PowerShell 7 不存在：" g_CodexDesktopPatchPowerShellPath)
+}
 
 ; 使用专属临时目录验证“状态号不能代替产物”的核心边界：
 ; 没有文件、只有 stable、两个变体都完整，必须分别返回 false / false / true。

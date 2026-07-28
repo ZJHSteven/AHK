@@ -12,6 +12,7 @@ global g_CodexDesktopPatchWatchIntervalMs := 60000
 global g_CodexDesktopPatchWatchStatePath := A_ScriptDir "\config\codex_desktop_patcher_watcher.ini"
 global g_CodexDesktopPatchProjectRoot := "D:\Workspace\codex-desktop-patcher"
 global g_CodexDesktopPatchWatchLogPath := A_ScriptDir "\logs\codex_desktop_patch_watcher.log"
+global g_CodexDesktopPatchPowerShellPath := "C:\Program Files\PowerShell\7\pwsh.exe"
 global g_CodexDesktopPatchRetryDelayMs := 1800000
 global g_CodexDesktopPatchFailedVersion := ""
 global g_CodexDesktopPatchNextRetryTick := 0
@@ -146,17 +147,25 @@ CodexDesktopPatchWatcherAreVariantsReady(version, runtimeRoot := "") {
 ; forceRebuild 仅在本应完成的版本缺少产物时使用，用于清理不完整的 runtime 目标。
 CodexDesktopPatchWatcherBuildVariants(version, forceRebuild := false) {
     global g_CodexDesktopPatchProjectRoot
+    global g_CodexDesktopPatchPowerShellPath
 
     buildScript := g_CodexDesktopPatchProjectRoot "\scripts\Build-CodexDesktop.ps1"
     launcherScript := g_CodexDesktopPatchProjectRoot "\scripts\New-CodexDesktopLaunchers.ps1"
     if !(FileExist(buildScript) && FileExist(launcherScript)) {
         return Map("ok", false, "message", "找不到 Codex Desktop 补丁项目脚本：" g_CodexDesktopPatchProjectRoot)
     }
+    if !FileExist(g_CodexDesktopPatchPowerShellPath) {
+        return Map("ok", false, "message", "找不到 PowerShell 7：" g_CodexDesktopPatchPowerShellPath)
+    }
 
     quote := Chr(34)
+    ; 构建脚本是 UTF-8 无 BOM。旧版 Windows PowerShell 5.1 会按系统代码页读取，
+    ; 中文注释/错误消息会变成乱码，甚至在解析阶段报 UnexpectedToken。
+    ; 因此构建必须明确使用 PowerShell 7；版号查询仍可使用系统 powershell.exe，
+    ; 因为那条短命令只包含 ASCII，不会遇到脚本编码问题。
     ; 只在状态与实际目录不一致时传入强制重建，避免正常轮询误删可用副本。
     forceRebuildArgument := forceRebuild ? " -ForceRebuild" : ""
-    command := "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " quote "& '" buildScript "' -Variant Stable" forceRebuildArgument "; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '" buildScript "' -Variant NoLock" forceRebuildArgument "; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '" launcherScript "'; exit $LASTEXITCODE" quote
+    command := quote g_CodexDesktopPatchPowerShellPath quote " -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " quote "& '" buildScript "' -Variant Stable" forceRebuildArgument "; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '" buildScript "' -Variant NoLock" forceRebuildArgument "; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '" launcherScript "'; exit $LASTEXITCODE" quote
     exitCode := RunWait(command, g_CodexDesktopPatchProjectRoot, "Hide")
     if (exitCode != 0) {
         return Map("ok", false, "message", "构建脚本退出码：" exitCode)
