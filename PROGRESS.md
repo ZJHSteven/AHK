@@ -1,7 +1,11 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
-- Codex Desktop 补丁更新：AHK 主进程现在每分钟检查 `OpenAI.Codex` 的 Store 包版本；仅在版本变化后调用 `D:\Workspace\codex-desktop-patcher` 重建 stable/no-lock 副本并显示结果提示。状态文件 `config/codex_desktop_patcher_watcher.ini` 已忽略，不含认证信息。
+- Codex Desktop 补丁更新：AHK 主进程现在每分钟检查 `OpenAI.Codex` 的 Store 包版本；只有“状态版本相同且当前版本的 stable/no-lock 两个 exe/ASAR 都存在”才跳过。首次运行、版本变化或状态领先于产物时都会构建，且构建返回 0 后仍要验证四个文件才写入 `last_built_version` 和提示。
+- 已完成：已停用旧的 `CodexHistoryAllProvidersPatchWatcher` 用户 Run 自启动项；现在只保留 `D:\Workspace\AHK\main.ahk` 中的一套 watcher，历史旧补丁目录和备份未删除。
+- 已完成：`main.ahk /Validate` 现在是无副作用的解析入口，不会再意外启动第二套 AHK 定时器；现场已收敛为一个 AHK 主进程。
+- 已完成：已适配 Store `OpenAI.Codex 26.721.4979.0` 的新压缩变量名；stable/no-lock 副本均已真实重建，stable 恢复当前 model/provider、turn 回放和 provider 参数转发，no-lock 已关闭单实例锁。该版本的全 provider 历史锚点已由上游改为 `modelProviders:[]`，补丁器会验证并保留这一正确语义。
+- 已验证：`tests/codex_desktop_patch_watcher_tests.ahk`、`main.ahk /Validate` 与补丁器 Node 测试 3/3 通过；重解包两个新 ASAR 后，stable/no-lock 的关键锚点均符合预期。
 - 现状：已定位并修复 Codex 第 4 套 `Right Code` 预设被识别/刷新回第 3 套 `何意味` 的根因：`profiles.ini` 里两者的 `template_provider_base_url` 曾同时写成 `https://ai.websee.top`，共享模板开启后会按这个错误真源重建第 4 套配置。
 - 已完成：`right_code.template_provider_base_url` 已改为 `https://www.right.codes/codex/v1`；本机被忽略的 `secrets/right_code/config.toml` 也已同步改到该地址，避免下次切换目标预设时继续复制旧地址。
 - 已完成：`tests/codex_profile_switcher_tests.ahk` 已补断言，要求共享模板同步后 `Right Code` 使用 `https://www.right.codes/codex/v1`，且生成后的 config 不再与 `何意味` 完全相同。

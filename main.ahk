@@ -9,6 +9,13 @@
 ; 让相对路径以本脚本所在目录为基准
 SetWorkingDir A_ScriptDir
 
+; CI / 本地回归可用的无副作用语法校验入口。
+; AHK 会在执行前解析本文件及所有 #Include，因此立刻退出仍能覆盖主脚本和模块语法；
+; 同时避免过去把 `/Validate` 当普通参数传入、意外额外启动一套定时 watcher。
+if (A_Args.Length = 1 && A_Args[1] = "/Validate") {
+    ExitApp
+}
+
 ; ---- 引入模块 ----
 #Include modules\utils.ahk
 #Include modules\codex_profile_switcher.ahk
