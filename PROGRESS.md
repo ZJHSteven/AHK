@@ -1,6 +1,8 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 已完成：Codex Desktop watcher 新增独立日志 `logs/codex_desktop_patch_watcher.log`；同一版本构建失败后会退避 30 分钟，完全相同的错误只提示一次，不再每分钟重复构建和弹窗。
+- 已验证：失败退避新增边界测试，覆盖首次失败提示、同错误去重、新版本不继承退避、30 分钟后恢复重试；watcher 专项测试与 `main.ahk /Validate` 均退出码 0。
 - Codex Desktop 补丁更新：AHK 主进程现在每分钟检查 `OpenAI.Codex` 的 Store 包版本；只有“状态版本相同且当前版本的 stable/no-lock 两个 exe/ASAR 都存在”才跳过。首次运行、版本变化或状态领先于产物时都会构建，且构建返回 0 后仍要验证四个文件才写入 `last_built_version` 和提示。
 - 已完成：已停用旧的 `CodexHistoryAllProvidersPatchWatcher` 用户 Run 自启动项；现在只保留 `D:\Workspace\AHK\main.ahk` 中的一套 watcher，历史旧补丁目录和备份未删除。
 - 已完成：`main.ahk /Validate` 现在是无副作用的解析入口，不会再意外启动第二套 AHK 定时器；现场已收敛为一个 AHK 主进程。

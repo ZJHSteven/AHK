@@ -32,6 +32,26 @@ try {
     if !CodexDesktopPatchWatcherAreVariantsReady(testVersion, testRoot) {
         throw Error("stable 与 no-lock 都完整时应被判定为已构建")
     }
+
+    ; 同一失败在退避窗口内不得每分钟重试，也不得反复弹相同提示。
+    global g_CodexDesktopPatchRetryDelayMs := 1800000
+    CodexDesktopPatchWatcherClearFailure()
+    if !CodexDesktopPatchWatcherRecordFailure(testVersion, "模拟失败", 1000) {
+        throw Error("首次失败应允许提示")
+    }
+    if !CodexDesktopPatchWatcherShouldDelayRetry(testVersion, 1001) {
+        throw Error("失败后 30 分钟内应暂停重试")
+    }
+    if CodexDesktopPatchWatcherRecordFailure(testVersion, "模拟失败", 2000) {
+        throw Error("完全相同的失败不应重复提示")
+    }
+    if CodexDesktopPatchWatcherShouldDelayRetry("99.88.77.67", 2001) {
+        throw Error("新版本不应继承旧版本的退避")
+    }
+    if CodexDesktopPatchWatcherShouldDelayRetry(testVersion, 1802001) {
+        throw Error("退避期结束后应允许再次尝试")
+    }
+    CodexDesktopPatchWatcherClearFailure()
 } finally {
     ; 测试只删除自己刚创建的临时目录，不触及正式 runtime 或用户会话数据。
     if DirExist(testRoot) {
@@ -39,4 +59,4 @@ try {
     }
 }
 
-FileAppend("PASS: version=" version "; variants-ready boundary checks passed`n", "*")
+FileAppend("PASS: version=" version "; variants-ready and retry-debounce checks passed`n", "*")

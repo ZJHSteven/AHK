@@ -11,11 +11,72 @@
 global g_CodexDesktopPatchWatchIntervalMs := 60000
 global g_CodexDesktopPatchWatchStatePath := A_ScriptDir "\config\codex_desktop_patcher_watcher.ini"
 global g_CodexDesktopPatchProjectRoot := "D:\Workspace\codex-desktop-patcher"
+global g_CodexDesktopPatchWatchLogPath := A_ScriptDir "\logs\codex_desktop_patch_watcher.log"
+global g_CodexDesktopPatchRetryDelayMs := 1800000
+global g_CodexDesktopPatchFailedVersion := ""
+global g_CodexDesktopPatchNextRetryTick := 0
+global g_CodexDesktopPatchLastNoticeKey := ""
+
+; 只记录真正影响判断的事件，不把每分钟一次的正常轮询写成海量日志。
+; 这个日志用于回答“到底是哪一步失败”，避免以后只能凭弹窗猜测。
+CodexDesktopPatchWatcherLog(message) {
+    global g_CodexDesktopPatchWatchLogPath
+
+    SplitPath(g_CodexDesktopPatchWatchLogPath, , &directory)
+    if !DirExist(directory) {
+        DirCreate(directory)
+    }
+    FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") " | " message "`n", g_CodexDesktopPatchWatchLogPath, "UTF-8")
+}
+
+; 同一版本构建失败后暂缓重试，避免每分钟重复做一次昂贵构建并反复提示。
+; A_TickCount 是系统启动后的毫秒数；本函数只处理 30 分钟这种短窗口。
+CodexDesktopPatchWatcherShouldDelayRetry(version, currentTick := unset) {
+    global g_CodexDesktopPatchFailedVersion
+    global g_CodexDesktopPatchNextRetryTick
+
+    if !IsSet(currentTick) {
+        currentTick := A_TickCount
+    }
+    return version = g_CodexDesktopPatchFailedVersion && currentTick < g_CodexDesktopPatchNextRetryTick
+}
+
+; 保存失败退避状态，并返回本次是否需要向用户显示一条新提示。
+; 完全相同的“版本 + 错误”只提示一次，但每次失败仍会落盘到日志。
+CodexDesktopPatchWatcherRecordFailure(version, message, currentTick := unset) {
+    global g_CodexDesktopPatchRetryDelayMs
+    global g_CodexDesktopPatchFailedVersion
+    global g_CodexDesktopPatchNextRetryTick
+    global g_CodexDesktopPatchLastNoticeKey
+
+    if !IsSet(currentTick) {
+        currentTick := A_TickCount
+    }
+    g_CodexDesktopPatchFailedVersion := version
+    g_CodexDesktopPatchNextRetryTick := currentTick + g_CodexDesktopPatchRetryDelayMs
+
+    noticeKey := version "|" message
+    shouldNotify := noticeKey != g_CodexDesktopPatchLastNoticeKey
+    g_CodexDesktopPatchLastNoticeKey := noticeKey
+    return shouldNotify
+}
+
+; 构建成功后清空失败状态，让未来真正的新版本可以正常触发。
+CodexDesktopPatchWatcherClearFailure() {
+    global g_CodexDesktopPatchFailedVersion
+    global g_CodexDesktopPatchNextRetryTick
+    global g_CodexDesktopPatchLastNoticeKey
+
+    g_CodexDesktopPatchFailedVersion := ""
+    g_CodexDesktopPatchNextRetryTick := 0
+    g_CodexDesktopPatchLastNoticeKey := ""
+}
 
 ; 初始化入口：启动后先尽快检查一次，之后每分钟检查。
 CodexDesktopPatchWatcherInitialize() {
     global g_CodexDesktopPatchWatchIntervalMs
 
+    CodexDesktopPatchWatcherLog("watcher 已启动")
     SetTimer(CodexDesktopPatchWatcherTick, -1500)
     SetTimer(CodexDesktopPatchWatcherTick, g_CodexDesktopPatchWatchIntervalMs)
 }
@@ -124,12 +185,21 @@ CodexDesktopPatchWatcherTick() {
         return
     }
 
+    if CodexDesktopPatchWatcherShouldDelayRetry(version) {
+        return
+    }
+
     ; 首次运行也必须构建。若 INI 声称当前版本已处理、但目录不完整，
     ; 则强制重建该版本，修复状态文件领先于实际 runtime 的情况。
     result := CodexDesktopPatchWatcherBuildVariants(version, !variantsReady)
     if result["ok"] {
+        CodexDesktopPatchWatcherClearFailure()
+        CodexDesktopPatchWatcherLog("构建成功：version=" version "; message=" result["message"])
         Toast("Codex Desktop 已更新，补丁副本已重建：" version, 4000)
     } else {
-        Toast("Codex Desktop 更新后重建失败：" result["message"], 6000)
+        CodexDesktopPatchWatcherLog("构建失败：version=" version "; message=" result["message"])
+        if CodexDesktopPatchWatcherRecordFailure(version, result["message"]) {
+            Toast("Codex Desktop 更新后重建失败：" result["message"] "（已暂停重复重试 30 分钟，详情见 watcher 日志）", 6000)
+        }
     }
 }
