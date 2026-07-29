@@ -1,6 +1,8 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 已验证：Store 仍为 `26.721.4979.0`；stable/no-lock 已强制重建成功，重新解包后 history 10 处、resume provider 1 处、token usage 1 处、provider 转发 2 处、no-lock 1 处均符合预期。
+- 已验证：修复后只运行一份 AHK；连续跨过两个一分钟轮询周期，watcher 日志没有新增失败或重复构建，版本比较与正式产物检查均为 true。
 - 已完成：修复 Store 版本末尾 CRLF 污染。PowerShell 查询改为 `Set-Content -NoNewline`，AHK 再用显式字符集清除空格、Tab、CR、LF；真实版本现在可直接命中正式 stable/no-lock 目录。
 - 已完成：watcher 测试新增 CR/LF 拒绝、版本规范化边界和“真实读取版本对应四个正式产物完整”检查，避免正则结尾锚点再次漏掉尾随换行。
 - 已定位并修复：Watch 反复构建失败的直接原因是它用 Windows PowerShell 5.1 读取 UTF-8 无 BOM 的 `Build-CodexDesktop.ps1`，中文文本被按旧代码页解码并触发 `UnexpectedToken`；构建入口现已明确改用 `C:\Program Files\PowerShell\7\pwsh.exe`。
