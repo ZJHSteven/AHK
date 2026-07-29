@@ -7,8 +7,17 @@ version := CodexDesktopPatchWatcherGetInstalledVersion()
 if !RegExMatch(version, "^\d+\.\d+\.\d+\.\d+$") {
     throw Error("未获得有效 OpenAI.Codex Store 版本：" version)
 }
+if InStr(version, "`r") || InStr(version, "`n") {
+    throw Error("Store 版本不得包含回车或换行")
+}
+if CodexDesktopPatchWatcherNormalizeVersion(" `t26.721.4979.0`r`n") != "26.721.4979.0" {
+    throw Error("版本规范化必须同时移除空格、Tab、CR 和 LF")
+}
 if !FileExist(g_CodexDesktopPatchPowerShellPath) {
     throw Error("watcher 指定的 PowerShell 7 不存在：" g_CodexDesktopPatchPowerShellPath)
+}
+if !CodexDesktopPatchWatcherAreVariantsReady(version) {
+    throw Error("真实 Store 版本的 stable/no-lock 正式产物当前不完整：" version)
 }
 
 ; 使用专属临时目录验证“状态号不能代替产物”的核心边界：

@@ -1,6 +1,8 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 已完成：修复 Store 版本末尾 CRLF 污染。PowerShell 查询改为 `Set-Content -NoNewline`，AHK 再用显式字符集清除空格、Tab、CR、LF；真实版本现在可直接命中正式 stable/no-lock 目录。
+- 已完成：watcher 测试新增 CR/LF 拒绝、版本规范化边界和“真实读取版本对应四个正式产物完整”检查，避免正则结尾锚点再次漏掉尾随换行。
 - 已定位并修复：Watch 反复构建失败的直接原因是它用 Windows PowerShell 5.1 读取 UTF-8 无 BOM 的 `Build-CodexDesktop.ps1`，中文文本被按旧代码页解码并触发 `UnexpectedToken`；构建入口现已明确改用 `C:\Program Files\PowerShell\7\pwsh.exe`。
 - 已完成：Codex Desktop watcher 新增独立日志 `logs/codex_desktop_patch_watcher.log`；同一版本构建失败后会退避 30 分钟，完全相同的错误只提示一次，不再每分钟重复构建和弹窗。
 - 已验证：失败退避新增边界测试，覆盖首次失败提示、同错误去重、新版本不继承退避、30 分钟后恢复重试；watcher 专项测试与 `main.ahk /Validate` 均退出码 0。

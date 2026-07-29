@@ -84,17 +84,23 @@ CodexDesktopPatchWatcherInitialize() {
 
 ; 查询当前用户已安装的 Microsoft Store Codex 包版本。
 ; 使用临时文件承接 PowerShell 标准输出，避免把复杂引号和管道逻辑塞进 AHK 变量。
+; 即使调用方意外传入带换行的文本，也统一在这里规范化，避免版本号污染路径和 INI。
+CodexDesktopPatchWatcherNormalizeVersion(rawVersion) {
+    return Trim(rawVersion, " `t`r`n")
+}
+
 CodexDesktopPatchWatcherGetInstalledVersion() {
     tempPath := A_Temp "\codex_desktop_package_version_" A_TickCount ".txt"
     quote := Chr(34)
-    command := "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " quote "(Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Version) | Set-Content -LiteralPath '" tempPath "' -Encoding ascii" quote
+    ; -NoNewline 从源头避免 CRLF；NormalizeVersion 是第二道防线，兼容旧临时文件或命令变化。
+    command := "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " quote "(Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Version) | Set-Content -LiteralPath '" tempPath "' -Encoding ascii -NoNewline" quote
 
     try {
         exitCode := RunWait(command, , "Hide")
         if (exitCode != 0 || !FileExist(tempPath)) {
             return ""
         }
-        return Trim(FileRead(tempPath, "UTF-8"))
+        return CodexDesktopPatchWatcherNormalizeVersion(FileRead(tempPath, "UTF-8"))
     } finally {
         try FileDelete(tempPath)
     }
