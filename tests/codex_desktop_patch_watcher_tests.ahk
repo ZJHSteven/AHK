@@ -109,3 +109,5 @@ try {
 }
 
 FileAppend("PASS: version=" version "; stage1-ready, command, state and retry checks passed`n", "*")
+; AutoHotkey 是 GUI 子系统；显式退出让 CI/PowerShell 能可靠等待测试结束，不遗留测试进程。
+ExitApp(0)

@@ -33,3 +33,5 @@ if !InStr(result["detail"], "Stage 1") {
 }
 
 FileAppend("PASS: Stage 1 watcher integration version=" version "`n", "*")
+; 显式结束测试解释器，避免被误认为第二个常驻 AHK 实例。
+ExitApp(0)
