@@ -1,7 +1,8 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
-- 已完成 Codex Desktop watcher 的 Stage 1 代码迁移：就绪判断现在要求透明 manifest、shim、real CLI、原版 app.asar 与全部 helper；构建命令只调用 Stage 1 + StableOnly，并把完整 stdout/stderr 写入 watcher 日志。首轮集成冒烟发现 `#Include` 场景下 `A_ScriptDir` 指向 tests，现已让集成测试显式使用仓库根的正式状态/日志路径，等待复验。
+- 已完成并验证 Codex Desktop watcher 的 Stage 1 代码迁移：就绪判断要求透明 manifest、shim、real CLI、原版 app.asar 与全部 helper；构建命令只调用 Stage 1 + StableOnly，完整 stdout/stderr 已真实写入 watcher 日志。专项测试和 AHK -> PowerShell 集成冒烟均退出码 0，正式 INI 已去重为当前版本。
+- 当前常驻 AHK 是管理员权限启动的旧内存实例；非管理员 `main.ahk /Validate` 会先触发 `#SingleInstance Force` 权限弹窗，不能算干净的无人值守验证。已停止重试，旧实例暂时继续安静轮询，待维护窗口由管理员方式重启后新 watcher 才正式生效。
 - 已验证：Store 仍为 `26.721.4979.0`；stable/no-lock 已强制重建成功，重新解包后 history 10 处、resume provider 1 处、token usage 1 处、provider 转发 2 处、no-lock 1 处均符合预期。
 - 已验证：修复后只运行一份 AHK；连续跨过两个一分钟轮询周期，watcher 日志没有新增失败或重复构建，版本比较与正式产物检查均为 true。
 - 已完成：修复 Store 版本末尾 CRLF 污染。PowerShell 查询改为 `Set-Content -NoNewline`，AHK 再用显式字符集清除空格、Tab、CR、LF；真实版本现在可直接命中正式 stable/no-lock 目录。

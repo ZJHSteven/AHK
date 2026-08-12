@@ -11,10 +11,11 @@
 
 ### 验收计划
 
-1. 重写产物就绪判断并补空目录、部分文件、错误 manifest、完整 Stage 1 四类边界。
-2. 重写构建命令，只调用 Stage 1 构建器和 Stable-only 启动器，不再构建 NoLock。
-3. 使用临时日志验证 stdout/stderr 捕获，状态 INI 只保留单一 `[state]`。
-4. 运行 watcher 专项测试与 `main.ahk /Validate`；不重启当前承载工作的 Codex Desktop。
+1. [x] 重写产物就绪判断并补空目录、部分文件、错误 manifest、完整 Stage 1 四类边界。
+2. [x] 重写构建命令，只调用 Stage 1 构建器和 Stable-only 启动器，不再构建 NoLock。
+3. [x] 使用临时日志验证 stdout/stderr 捕获，状态 INI 只保留单一 `[state]`。
+4. [x] watcher 专项测试与真实 AHK -> PowerShell 集成冒烟通过；`main.ahk /Validate` 因现有管理员单实例早于脚本参数处理而弹出权限提示，已停止用非管理员进程重试。
+5. [ ] 在用户允许的维护窗口，以管理员权限重启现有 AHK 常驻实例，使新 watcher 代码真正加载；不影响当前 Codex Desktop 进程。
 
 ## 2026-07-30 Codex Desktop watcher 换行误判收口
 
