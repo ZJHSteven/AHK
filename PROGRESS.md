@@ -1,6 +1,7 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 正在迁移 Codex Desktop watcher：目标已改为透明 Shim Stage 1，不再把旧 ASAR Stable/NoLock 四个文件当作完成条件；代码尚未修改，当前官方 Desktop 不会被 watcher 重启。
 - 已验证：Store 仍为 `26.721.4979.0`；stable/no-lock 已强制重建成功，重新解包后 history 10 处、resume provider 1 处、token usage 1 处、provider 转发 2 处、no-lock 1 处均符合预期。
 - 已验证：修复后只运行一份 AHK；连续跨过两个一分钟轮询周期，watcher 日志没有新增失败或重复构建，版本比较与正式产物检查均为 true。
 - 已完成：修复 Store 版本末尾 CRLF 污染。PowerShell 查询改为 `Set-Content -NoNewline`，AHK 再用显式字符集清除空格、Tab、CR、LF；真实版本现在可直接命中正式 stable/no-lock 目录。

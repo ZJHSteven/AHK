@@ -1,5 +1,21 @@
 # ExecPlan
 
+## 2026-08-12 Codex Desktop watcher 迁移到透明 Shim Stage 1
+
+### 当前目标
+
+- 停止把 ASAR Stable/NoLock 两套产物作为 watcher 完成条件。
+- watcher 改为调用 `Build-CodexDesktopStage1.ps1`，只发布“整树 Clone + codex-real.exe + 零改写 stdio shim”。
+- 只有 Stage 1 manifest、ChatGPT.exe、原版 app.asar、shim、real CLI 和 helper 全部存在时才写入成功版本。
+- 构建 stdout/stderr 必须完整写入日志；失败时保留上一版可用产物并退避，不再只记录 exit code。
+
+### 验收计划
+
+1. 重写产物就绪判断并补空目录、部分文件、错误 manifest、完整 Stage 1 四类边界。
+2. 重写构建命令，只调用 Stage 1 构建器和 Stable-only 启动器，不再构建 NoLock。
+3. 使用临时日志验证 stdout/stderr 捕获，状态 INI 只保留单一 `[state]`。
+4. 运行 watcher 专项测试与 `main.ahk /Validate`；不重启当前承载工作的 Codex Desktop。
+
 ## 2026-07-30 Codex Desktop watcher 换行误判收口
 
 ### 已确认根因
