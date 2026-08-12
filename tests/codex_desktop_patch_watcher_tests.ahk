@@ -16,19 +16,19 @@ if CodexDesktopPatchWatcherNormalizeVersion(" `t26.721.4979.0`r`n") != "26.721.4
 if !FileExist(g_CodexDesktopPatchPowerShellPath) {
     throw Error("watcher 指定的 PowerShell 7 不存在：" g_CodexDesktopPatchPowerShellPath)
 }
-if !CodexDesktopPatchWatcherIsStage1Ready(version) {
-    throw Error("真实 Store 版本的透明 Stage 1 正式产物当前不完整：" version)
+if !CodexDesktopPatchWatcherIsStage4Ready(version) {
+    throw Error("真实 Store 版本的协议路由 Stage 4 正式产物当前不完整：" version)
 }
 
 ; 使用专属临时目录验证“状态号不能代替产物”的核心边界。
 testRoot := A_Temp "\codex_desktop_patch_watcher_tests_" A_TickCount
 testVersion := "99.88.77.66"
 try {
-    if CodexDesktopPatchWatcherIsStage1Ready(testVersion, testRoot) {
+    if CodexDesktopPatchWatcherIsStage4Ready(testVersion, testRoot) {
         throw Error("空 runtime 不应被判定为已构建")
     }
 
-    stageRoot := testRoot "\apps\OpenAI.Codex_" testVersion "\stage1"
+    stageRoot := testRoot "\apps\OpenAI.Codex_" testVersion "\stage4"
     stageApp := stageRoot "\app"
     resources := stageApp "\resources"
     DirCreate(resources)
@@ -37,6 +37,7 @@ try {
         resources "\app.asar",
         resources "\codex.exe",
         resources "\codex-real.exe",
+        resources "\codex-shim-routes.json",
         resources "\codex-command-runner.exe",
         resources "\codex-windows-sandbox-setup.exe",
         resources "\codex-code-mode-host.exe",
@@ -45,23 +46,23 @@ try {
     for requiredFile in requiredFiles {
         FileAppend("test", requiredFile)
     }
-    FileAppend('{"architecture":"wrong","packageVersion":"' testVersion '","protocolValidation":"initialize-direct-equals-shim"}', stageRoot "\stage1-manifest.json", "UTF-8")
-    if CodexDesktopPatchWatcherIsStage1Ready(testVersion, testRoot) {
+    FileAppend('{"architecture":"wrong","packageVersion":"' testVersion '","protocolValidation":"initialize-direct-equals-shim","validatedVirtualModels":["heyiwei::gpt-5.6-sol","heyiwei::gpt-5.6-terra","deepseek-v4-flash"]}', stageRoot "\stage4-manifest.json", "UTF-8")
+    if CodexDesktopPatchWatcherIsStage4Ready(testVersion, testRoot) {
         throw Error("文件齐全但 architecture 错误时不应就绪")
     }
-    FileDelete(stageRoot "\stage1-manifest.json")
-    FileAppend('{"architecture":"transparent-shim-stage1","packageVersion":"' testVersion '","protocolValidation":"initialize-direct-equals-shim"}', stageRoot "\stage1-manifest.json", "UTF-8")
-    if !CodexDesktopPatchWatcherIsStage1Ready(testVersion, testRoot) {
-        throw Error("文件与 Stage 1 manifest 完整时应判定为已构建")
+    FileDelete(stageRoot "\stage4-manifest.json")
+    FileAppend('{"architecture":"protocol-observer-stage4","packageVersion":"' testVersion '","protocolValidation":"initialize-direct-equals-shim","validatedVirtualModels":["heyiwei::gpt-5.6-sol","heyiwei::gpt-5.6-terra","deepseek-v4-flash"]}', stageRoot "\stage4-manifest.json", "UTF-8")
+    if !CodexDesktopPatchWatcherIsStage4Ready(testVersion, testRoot) {
+        throw Error("文件、路由配置与 Stage 4 manifest 完整时应判定为已构建")
     }
 
-    ; 构建命令必须只包含 Stage 1 和 StableOnly，不能残留旧 NoLock 构建。
+    ; 构建命令必须发布 Stage 4 和 StableOnly，不能残留旧 NoLock 构建。
     command := CodexDesktopPatchWatcherCreateBuildCommand(true, testRoot "\build.log")
-    if !InStr(command, "Build-CodexDesktopStage1.ps1") || !InStr(command, "-ForceRebuild") || !InStr(command, "-StableOnly") {
-        throw Error("Stage 1 构建命令缺少必要入口或参数")
+    if !InStr(command, "Build-CodexDesktopStage1.ps1") || !InStr(command, "-StageName stage4") || !InStr(command, "-PublishState") || !InStr(command, "-ForceRebuild") || !InStr(command, "-StableOnly") {
+        throw Error("Stage 4 构建命令缺少必要入口或参数")
     }
     if InStr(command, "-Variant NoLock") {
-        throw Error("Stage 1 watcher 不得继续构建 NoLock")
+        throw Error("Stage 4 watcher 不得继续构建 NoLock")
     }
 
     ; 状态写入必须清理重复 section，只留下一个规范化版本值。
@@ -108,6 +109,6 @@ try {
     }
 }
 
-FileAppend("PASS: version=" version "; stage1-ready, command, state and retry checks passed`n", "*")
+FileAppend("PASS: version=" version "; stage4-ready, routing command, state and retry checks passed`n", "*")
 ; AutoHotkey 是 GUI 子系统；显式退出让 CI/PowerShell 能可靠等待测试结束，不遗留测试进程。
 ExitApp(0)
