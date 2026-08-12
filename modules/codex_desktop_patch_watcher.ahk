@@ -1,9 +1,9 @@
 ; ============================================
-; Microsoft Store Codex Desktop 版本监视与补丁重建
+; Microsoft Store Codex Desktop 版本监视与透明 Stage 1 Clone 重建
 ; --------------------------------------------
 ; 设计目标：
 ; 1. AHK 已经常驻，因此用它的 SetTimer 每分钟执行一次轻量版号查询。
-; 2. 只有 OpenAI.Codex 的 Store 包版本发生变化，才调用补丁项目重建两种副本。
+; 2. 只有 Store 版本或 Stage 1 产物状态变化，才调用项目重建透明 Clone。
 ; 3. 不保留后台 PowerShell；每次查询启动一个极短的 NoProfile 子进程后立即退出。
 ; 4. 状态文件只保存已处理版本，不保存配置、认证或路径以外的敏感内容。
 ; ============================================
@@ -112,33 +112,49 @@ CodexDesktopPatchWatcherReadLastBuiltVersion() {
     return IniRead(g_CodexDesktopPatchWatchStatePath, "state", "last_built_version", "")
 }
 
-; 仅在两种副本都成功构建后写入版本，避免失败后被错误标记为已处理。
+; 仅在 Stage 1 完整验收后写入版本，避免失败后被错误标记为已处理。
+; 旧 INI 曾经累积多个重复 [state]；这里直接原子重写唯一 section，而不是继续 IniWrite。
 CodexDesktopPatchWatcherWriteLastBuiltVersion(version) {
     global g_CodexDesktopPatchWatchStatePath
     SplitPath(g_CodexDesktopPatchWatchStatePath, , &directory)
     if !DirExist(directory) {
         DirCreate(directory)
     }
-    IniWrite(version, g_CodexDesktopPatchWatchStatePath, "state", "last_built_version")
+    tempPath := g_CodexDesktopPatchWatchStatePath ".tmp"
+    try {
+        if FileExist(tempPath) {
+            FileDelete(tempPath)
+        }
+        FileAppend("[state]`nlast_built_version=" version "`n", tempPath, "UTF-8-RAW")
+        FileMove(tempPath, g_CodexDesktopPatchWatchStatePath, true)
+    } finally {
+        try FileDelete(tempPath)
+    }
 }
 
-; 判断某个 Store 版本的两个补丁变体是否真的都已经落盘。
-; 不能只相信 INI 中的版本号：旧逻辑曾在首次检查时先写入版本、却没有构建，
-; 因而需要把实际可启动程序和被补丁的 app.asar 都作为成功条件。
+; 判断某个 Store 版本的透明 Stage 1 是否真的完整落盘。
+; manifest 必须明确声明 transparent-shim-stage1 和当前版本；仅有几个占位文件不能通过。
 ; runtimeRoot 参数主要给自动化测试使用；日常运行不传时使用正式 runtime 目录。
-CodexDesktopPatchWatcherAreVariantsReady(version, runtimeRoot := "") {
+CodexDesktopPatchWatcherIsStage1Ready(version, runtimeRoot := "") {
     global g_CodexDesktopPatchProjectRoot
 
     if (runtimeRoot = "") {
         runtimeRoot := g_CodexDesktopPatchProjectRoot "\runtime"
     }
 
-    versionRoot := runtimeRoot "\apps\OpenAI.Codex_" version
+    stageRoot := runtimeRoot "\apps\OpenAI.Codex_" version "\stage1"
+    appRoot := stageRoot "\app"
+    manifestPath := stageRoot "\stage1-manifest.json"
     requiredPaths := [
-        versionRoot "\stable\app\ChatGPT.exe",
-        versionRoot "\stable\app\resources\app.asar",
-        versionRoot "\no-lock\app\ChatGPT.exe",
-        versionRoot "\no-lock\app\resources\app.asar"
+        appRoot "\ChatGPT.exe",
+        appRoot "\resources\app.asar",
+        appRoot "\resources\codex.exe",
+        appRoot "\resources\codex-real.exe",
+        appRoot "\resources\codex-command-runner.exe",
+        appRoot "\resources\codex-windows-sandbox-setup.exe",
+        appRoot "\resources\codex-code-mode-host.exe",
+        appRoot "\resources\rg.exe",
+        manifestPath
     ]
 
     for requiredPath in requiredPaths {
@@ -146,45 +162,66 @@ CodexDesktopPatchWatcherAreVariantsReady(version, runtimeRoot := "") {
             return false
         }
     }
-    return true
+    try {
+        manifest := FileRead(manifestPath, "UTF-8")
+    } catch {
+        return false
+    }
+    escapedVersion := StrReplace(version, ".", "\.")
+    hasArchitecture := RegExMatch(manifest, '"architecture"\s*:\s*"transparent-shim-stage1"')
+    hasVersion := RegExMatch(manifest, '"packageVersion"\s*:\s*"' escapedVersion '"')
+    hasProtocolCheck := RegExMatch(manifest, '"protocolValidation"\s*:\s*"initialize-direct-equals-shim"')
+    return hasArchitecture && hasVersion && hasProtocolCheck
 }
 
-; 调用独立 Git 仓库中的构建脚本。运行过程隐藏窗口，结束后用返回码决定是否写状态。
-; forceRebuild 仅在本应完成的版本缺少产物时使用，用于清理不完整的 runtime 目标。
-CodexDesktopPatchWatcherBuildVariants(version, forceRebuild := false) {
+; 生成可测试的 PowerShell 命令：只构建 Stage 1，再生成 Stable-only 启动器。
+; 整个 script block 的 stdout/stderr 都重定向到专属文件，AHK 日志会完整收录。
+CodexDesktopPatchWatcherCreateBuildCommand(forceRebuild, outputPath) {
     global g_CodexDesktopPatchProjectRoot
     global g_CodexDesktopPatchPowerShellPath
 
-    buildScript := g_CodexDesktopPatchProjectRoot "\scripts\Build-CodexDesktop.ps1"
+    buildScript := g_CodexDesktopPatchProjectRoot "\scripts\Build-CodexDesktopStage1.ps1"
     launcherScript := g_CodexDesktopPatchProjectRoot "\scripts\New-CodexDesktopLaunchers.ps1"
-    if !(FileExist(buildScript) && FileExist(launcherScript)) {
-        return Map("ok", false, "message", "找不到 Codex Desktop 补丁项目脚本：" g_CodexDesktopPatchProjectRoot)
-    }
-    if !FileExist(g_CodexDesktopPatchPowerShellPath) {
-        return Map("ok", false, "message", "找不到 PowerShell 7：" g_CodexDesktopPatchPowerShellPath)
-    }
 
     quote := Chr(34)
-    ; 构建脚本是 UTF-8 无 BOM。旧版 Windows PowerShell 5.1 会按系统代码页读取，
-    ; 中文注释/错误消息会变成乱码，甚至在解析阶段报 UnexpectedToken。
-    ; 因此构建必须明确使用 PowerShell 7；版号查询仍可使用系统 powershell.exe，
-    ; 因为那条短命令只包含 ASCII，不会遇到脚本编码问题。
-    ; 只在状态与实际目录不一致时传入强制重建，避免正常轮询误删可用副本。
     forceRebuildArgument := forceRebuild ? " -ForceRebuild" : ""
-    command := quote g_CodexDesktopPatchPowerShellPath quote " -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " quote "& '" buildScript "' -Variant Stable" forceRebuildArgument "; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '" buildScript "' -Variant NoLock" forceRebuildArgument "; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; & '" launcherScript "'; exit $LASTEXITCODE" quote
-    exitCode := RunWait(command, g_CodexDesktopPatchProjectRoot, "Hide")
-    if (exitCode != 0) {
-        return Map("ok", false, "message", "构建脚本退出码：" exitCode)
+    scriptBlock := "& { $ErrorActionPreference='Stop'; try { & '" buildScript "'" forceRebuildArgument "; & '" launcherScript "' -StableOnly; exit 0 } catch { Write-Error ($_ | Out-String); exit 1 } } *> '" outputPath "'"
+    return quote g_CodexDesktopPatchPowerShellPath quote " -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " quote scriptBlock quote
+}
+
+; 调用 Stage 1 构建链。失败与成功输出都会写入 watcher 日志，便于精确定位。
+CodexDesktopPatchWatcherBuildStage1(version, forceRebuild := false) {
+    global g_CodexDesktopPatchProjectRoot
+    global g_CodexDesktopPatchPowerShellPath
+
+    buildScript := g_CodexDesktopPatchProjectRoot "\scripts\Build-CodexDesktopStage1.ps1"
+    launcherScript := g_CodexDesktopPatchProjectRoot "\scripts\New-CodexDesktopLaunchers.ps1"
+    if !(FileExist(buildScript) && FileExist(launcherScript)) {
+        return Map("ok", false, "message", "找不到 Stage 1 构建或启动器脚本", "detail", g_CodexDesktopPatchProjectRoot)
+    }
+    if !FileExist(g_CodexDesktopPatchPowerShellPath) {
+        return Map("ok", false, "message", "找不到 PowerShell 7", "detail", g_CodexDesktopPatchPowerShellPath)
     }
 
-    ; 脚本返回 0 仍不足以证明两个副本可启动；这里再次检查实际文件，
-    ; 以免把失败或被跳过的构建错误记成“已经处理”。
-    if !CodexDesktopPatchWatcherAreVariantsReady(version) {
-        return Map("ok", false, "message", "构建结束但稳定版或 no-lock 产物缺失")
+    outputPath := A_Temp "\codex_desktop_stage1_build_" A_TickCount ".log"
+    command := CodexDesktopPatchWatcherCreateBuildCommand(forceRebuild, outputPath)
+    try {
+        exitCode := RunWait(command, g_CodexDesktopPatchProjectRoot, "Hide")
+        detail := FileExist(outputPath) ? FileRead(outputPath, "UTF-8") : "（构建进程没有生成输出文件）"
+    } finally {
+        try FileDelete(outputPath)
+    }
+    CodexDesktopPatchWatcherLog("Stage 1 构建输出：version=" version "; exit=" exitCode "`n" detail)
+    if (exitCode != 0) {
+        return Map("ok", false, "message", "Stage 1 构建脚本退出码：" exitCode, "detail", detail)
+    }
+
+    if !CodexDesktopPatchWatcherIsStage1Ready(version) {
+        return Map("ok", false, "message", "构建结束但 Stage 1 manifest 或必要文件不完整", "detail", detail)
     }
 
     CodexDesktopPatchWatcherWriteLastBuiltVersion(version)
-    return Map("ok", true, "message", "已重建 " version)
+    return Map("ok", true, "message", "已重建透明 Stage 1 " version, "detail", detail)
 }
 
 ; 定时回调：版本号与实际产物必须同时满足，才允许跳过。
@@ -195,8 +232,8 @@ CodexDesktopPatchWatcherTick() {
     }
 
     lastVersion := CodexDesktopPatchWatcherReadLastBuiltVersion()
-    variantsReady := CodexDesktopPatchWatcherAreVariantsReady(version)
-    if (version = lastVersion && variantsReady) {
+    stage1Ready := CodexDesktopPatchWatcherIsStage1Ready(version)
+    if (version = lastVersion && stage1Ready) {
         return
     }
 
@@ -206,11 +243,11 @@ CodexDesktopPatchWatcherTick() {
 
     ; 首次运行也必须构建。若 INI 声称当前版本已处理、但目录不完整，
     ; 则强制重建该版本，修复状态文件领先于实际 runtime 的情况。
-    result := CodexDesktopPatchWatcherBuildVariants(version, !variantsReady)
+    result := CodexDesktopPatchWatcherBuildStage1(version, !stage1Ready)
     if result["ok"] {
         CodexDesktopPatchWatcherClearFailure()
         CodexDesktopPatchWatcherLog("构建成功：version=" version "; message=" result["message"])
-        Toast("Codex Desktop 已更新，补丁副本已重建：" version, 4000)
+        Toast("Codex Desktop 已更新，透明 Stage 1 已重建：" version, 4000)
     } else {
         CodexDesktopPatchWatcherLog("构建失败：version=" version "; message=" result["message"])
         if CodexDesktopPatchWatcherRecordFailure(version, result["message"]) {

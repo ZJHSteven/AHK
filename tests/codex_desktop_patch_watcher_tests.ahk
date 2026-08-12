@@ -16,33 +16,70 @@ if CodexDesktopPatchWatcherNormalizeVersion(" `t26.721.4979.0`r`n") != "26.721.4
 if !FileExist(g_CodexDesktopPatchPowerShellPath) {
     throw Error("watcher 指定的 PowerShell 7 不存在：" g_CodexDesktopPatchPowerShellPath)
 }
-if !CodexDesktopPatchWatcherAreVariantsReady(version) {
-    throw Error("真实 Store 版本的 stable/no-lock 正式产物当前不完整：" version)
+if !CodexDesktopPatchWatcherIsStage1Ready(version) {
+    throw Error("真实 Store 版本的透明 Stage 1 正式产物当前不完整：" version)
 }
 
-; 使用专属临时目录验证“状态号不能代替产物”的核心边界：
-; 没有文件、只有 stable、两个变体都完整，必须分别返回 false / false / true。
+; 使用专属临时目录验证“状态号不能代替产物”的核心边界。
 testRoot := A_Temp "\codex_desktop_patch_watcher_tests_" A_TickCount
 testVersion := "99.88.77.66"
 try {
-    if CodexDesktopPatchWatcherAreVariantsReady(testVersion, testRoot) {
+    if CodexDesktopPatchWatcherIsStage1Ready(testVersion, testRoot) {
         throw Error("空 runtime 不应被判定为已构建")
     }
 
-    stableApp := testRoot "\apps\OpenAI.Codex_" testVersion "\stable\app"
-    DirCreate(stableApp "\resources")
-    FileAppend("test", stableApp "\ChatGPT.exe")
-    FileAppend("test", stableApp "\resources\app.asar")
-    if CodexDesktopPatchWatcherAreVariantsReady(testVersion, testRoot) {
-        throw Error("仅 stable 完整时不应被判定为已构建")
+    stageRoot := testRoot "\apps\OpenAI.Codex_" testVersion "\stage1"
+    stageApp := stageRoot "\app"
+    resources := stageApp "\resources"
+    DirCreate(resources)
+    requiredFiles := [
+        stageApp "\ChatGPT.exe",
+        resources "\app.asar",
+        resources "\codex.exe",
+        resources "\codex-real.exe",
+        resources "\codex-command-runner.exe",
+        resources "\codex-windows-sandbox-setup.exe",
+        resources "\codex-code-mode-host.exe",
+        resources "\rg.exe"
+    ]
+    for requiredFile in requiredFiles {
+        FileAppend("test", requiredFile)
+    }
+    FileAppend('{"architecture":"wrong","packageVersion":"' testVersion '","protocolValidation":"initialize-direct-equals-shim"}', stageRoot "\stage1-manifest.json", "UTF-8")
+    if CodexDesktopPatchWatcherIsStage1Ready(testVersion, testRoot) {
+        throw Error("文件齐全但 architecture 错误时不应就绪")
+    }
+    FileDelete(stageRoot "\stage1-manifest.json")
+    FileAppend('{"architecture":"transparent-shim-stage1","packageVersion":"' testVersion '","protocolValidation":"initialize-direct-equals-shim"}', stageRoot "\stage1-manifest.json", "UTF-8")
+    if !CodexDesktopPatchWatcherIsStage1Ready(testVersion, testRoot) {
+        throw Error("文件与 Stage 1 manifest 完整时应判定为已构建")
     }
 
-    noLockApp := testRoot "\apps\OpenAI.Codex_" testVersion "\no-lock\app"
-    DirCreate(noLockApp "\resources")
-    FileAppend("test", noLockApp "\ChatGPT.exe")
-    FileAppend("test", noLockApp "\resources\app.asar")
-    if !CodexDesktopPatchWatcherAreVariantsReady(testVersion, testRoot) {
-        throw Error("stable 与 no-lock 都完整时应被判定为已构建")
+    ; 构建命令必须只包含 Stage 1 和 StableOnly，不能残留旧 NoLock 构建。
+    command := CodexDesktopPatchWatcherCreateBuildCommand(true, testRoot "\build.log")
+    if !InStr(command, "Build-CodexDesktopStage1.ps1") || !InStr(command, "-ForceRebuild") || !InStr(command, "-StableOnly") {
+        throw Error("Stage 1 构建命令缺少必要入口或参数")
+    }
+    if InStr(command, "-Variant NoLock") {
+        throw Error("Stage 1 watcher 不得继续构建 NoLock")
+    }
+
+    ; 状态写入必须清理重复 section，只留下一个规范化版本值。
+    originalStatePath := g_CodexDesktopPatchWatchStatePath
+    global g_CodexDesktopPatchWatchStatePath := testRoot "\watcher.ini"
+    try {
+        FileAppend("[state]`nlast_built_version=old`n[state]`nlast_built_version=older`n", g_CodexDesktopPatchWatchStatePath, "UTF-8")
+        CodexDesktopPatchWatcherWriteLastBuiltVersion(testVersion)
+        stateText := FileRead(g_CodexDesktopPatchWatchStatePath, "UTF-8")
+        StrReplace(stateText, "[state]", "", false, &sectionCount)
+        if sectionCount != 1 {
+            throw Error("状态文件必须只保留一个 [state]")
+        }
+        if CodexDesktopPatchWatcherReadLastBuiltVersion() != testVersion {
+            throw Error("状态文件回读版本不一致")
+        }
+    } finally {
+        global g_CodexDesktopPatchWatchStatePath := originalStatePath
     }
 
     ; 同一失败在退避窗口内不得每分钟重试，也不得反复弹相同提示。
@@ -71,4 +108,4 @@ try {
     }
 }
 
-FileAppend("PASS: version=" version "; variants-ready and retry-debounce checks passed`n", "*")
+FileAppend("PASS: version=" version "; stage1-ready, command, state and retry checks passed`n", "*")
