@@ -9,6 +9,10 @@
 #Include ..\modules\utils.ahk
 #Include ..\modules\codex_desktop_patch_watcher.ahk
 
+; #Include 不会改变 A_ScriptDir；测试入口位于 tests，所以显式把正式运行路径指回仓库根。
+global g_CodexDesktopPatchWatchStatePath := A_ScriptDir "\..\config\codex_desktop_patcher_watcher.ini"
+global g_CodexDesktopPatchWatchLogPath := A_ScriptDir "\..\logs\codex_desktop_patch_watcher.log"
+
 version := CodexDesktopPatchWatcherGetInstalledVersion()
 if !RegExMatch(version, "^\d+\.\d+\.\d+\.\d+$") {
     throw Error("无法取得有效 Store 版本：" version)
@@ -29,4 +33,3 @@ if !InStr(result["detail"], "Stage 1") {
 }
 
 FileAppend("PASS: Stage 1 watcher integration version=" version "`n", "*")
-
