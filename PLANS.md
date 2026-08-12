@@ -1,5 +1,21 @@
 # ExecPlan
 
+## 2026-08-13 Codex Desktop watcher 发布协议路由 Stage 4
+
+### 当前目标
+
+- watcher 从纯透明 `stage1` 升级为构建并发布 `stage4`，保留脱敏协议观测，并启用虚拟模型目录与双向模型转译。
+- 就绪判定必须检查 `protocol-observer-stage4` manifest、无密钥路由配置、Shim/real CLI/helper，以及已验收的何意味 Sol、何意味 Terra、DeepSeek Flash 三个模型。
+- Store 更新时先在 staging 完成透明性、模型目录与路由契约测试，成功后才切换 `runtime\state.json` 和 Stable；失败继续保留上一版可用 Stable。
+- 当前已加载的管理员 AHK 实例不在本轮强制重启，避免再次触发权限/单实例弹窗；代码将在用户下次正常重启 AHK 后生效。
+
+### 验收计划
+
+1. [ ] 将就绪函数、构建命令、日志和提示从 Stage 1 契约升级到 Stage 4。
+2. [ ] 更新单元夹具，覆盖缺文件、错误 architecture、缺路由模型和完整 Stage 4。
+3. [ ] 运行 watcher 单元测试、真实 AHK → PowerShell 集成测试及补丁器完整回归。
+4. [ ] 发布已验收的 Stage 4 为 Stable，但不重启当前 Codex；用户下次从桌面 Stable 进入后做真实中转请求验收。
+
 ## 2026-08-12 Codex Desktop watcher 迁移到透明 Shim Stage 1
 
 ### 当前目标
