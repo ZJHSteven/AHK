@@ -11,10 +11,10 @@
 
 ### 验收计划
 
-1. [ ] 将就绪函数、构建命令、日志和提示从 Stage 1 契约升级到 Stage 4。
-2. [ ] 更新单元夹具，覆盖缺文件、错误 architecture、缺路由模型和完整 Stage 4。
-3. [ ] 运行 watcher 单元测试、真实 AHK → PowerShell 集成测试及补丁器完整回归。
-4. [ ] 发布已验收的 Stage 4 为 Stable，但不重启当前 Codex；用户下次从桌面 Stable 进入后做真实中转请求验收。
+1. [x] 将就绪函数、构建命令、日志和提示从 Stage 1 契约升级到 Stage 4。
+2. [x] 更新单元夹具，覆盖缺文件、错误 architecture、路由配置和三个已验收模型的完整 Stage 4。
+3. [x] watcher 单元测试、真实 AHK → PowerShell 集成测试及补丁器完整回归通过。
+4. [x] 已验收 Stage 4 已发布为 Stable，当前 Codex 未重启；用户下次从桌面 Stable 进入后做真实中转请求验收。
 
 ## 2026-08-12 Codex Desktop watcher 迁移到透明 Shim Stage 1
 

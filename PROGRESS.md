@@ -1,8 +1,9 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
-- 已完成并验证 Codex Desktop watcher 的 Stage 1 代码迁移：就绪判断要求透明 manifest、shim、real CLI、原版 app.asar 与全部 helper；构建命令只调用 Stage 1 + StableOnly，完整 stdout/stderr 已真实写入 watcher 日志。专项测试和 AHK -> PowerShell 集成冒烟均退出码 0，正式 INI 已去重为当前版本。
-- 当前常驻 AHK 是管理员权限启动的旧内存实例；非管理员 `main.ahk /Validate` 会先触发 `#SingleInstance Force` 权限弹窗，不能算干净的无人值守验证。已停止重试，旧实例暂时继续安静轮询，待维护窗口由管理员方式重启后新 watcher 才正式生效。
+- 已完成并验证 Codex Desktop watcher 的 Stage 4 迁移：就绪判断要求 `protocol-observer-stage4` manifest、无密钥路由配置、shim、real CLI、原版 app.asar、全部 helper，以及何意味 Sol/Terra 与 DeepSeek Flash 三个已验收模型；构建命令使用 `-StageName stage4 -PublishState` 后再刷新 StableOnly。
+- watcher 单元测试与真实 AHK -> PowerShell Stage 4 集成测试均退出码 0；补丁器 Stage 4 已发布为 Stable，失败时仍由 staging/manifest 门槛保留上一版可用 Stable。
+- 当前常驻管理员 AHK 于 2026-08-13 00:14 重启，已解决旧实例并存；但它早于本轮 Stage 4 watcher 源码修改，因此内存中仍是 Stage 1 watcher。磁盘代码会在用户下次正常重启 AHK 后加载，不应再用非管理员 `/Validate` 强行替换管理员实例。
 - 进程收口时发现两个 watcher 测试解释器未显式退出；已在两个测试入口末尾增加 `ExitApp(0)`，后续改用 `Start-Process -Wait` 获取真实退出码，防止测试进程被误认为第二个常驻实例。
 - 已验证：Store 仍为 `26.721.4979.0`；stable/no-lock 已强制重建成功，重新解包后 history 10 处、resume provider 1 处、token usage 1 处、provider 转发 2 处、no-lock 1 处均符合预期。
 - 已验证：修复后只运行一份 AHK；连续跨过两个一分钟轮询周期，watcher 日志没有新增失败或重复构建，版本比较与正式产物检查均为 true。
