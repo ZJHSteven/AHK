@@ -2,6 +2,7 @@
 
 ## 变更记录
 
+- 2026-08-13：Codex Desktop watcher 从 Stage 4 升级为 Stage 5 发布契约；新增 manifest 哈希、错误版本、缺模型和缺文件边界检查，构建命令固定发布 `-StageName stage5`。管理员 AHK 由用户手动 Reload，自动化不得强制替换。
 - 2026-02-13：聊天消息清洗新增附件噪声过滤：自动删除正文中的 HTML/Markdown 图片片段与纯 `file://` 资源行，并在清洗后正文为空时跳过该消息（不再输出 `[空消息]`），更新 `modules/chat_message_cleaner.ahk`。
 - 2026-02-13：彻底修复聊天清洗模块中的连引号兼容性：在 `ChatStripTomlInlineComment` 与 `ChatParseTomlToken` 中统一改为 `Chr(34)/Chr(92)` 字符常量比较与替换，避免再次触发 `v1 script` 误判与 Reload 失败，更新 `modules/chat_message_cleaner.ahk`。
 - 2026-02-13：修复 `ChatStripTomlInlineComment` 中双引号判定写法兼容性问题：将 `if (ch = \"\"\"\")` 改为 `if (ch = Chr(34))`，避免部分环境误报 v1 语法并导致 Reload 失败，更新 `modules/chat_message_cleaner.ahk`。

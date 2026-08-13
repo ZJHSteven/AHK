@@ -1,11 +1,20 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- Codex Desktop watcher 的 Stage 5 磁盘适配与自动化验收已完成。真实集成日志在
+  `2026-08-13 18:32:11` 记录 `Stage 5 构建输出：exit=0`；构建器安全复用现有 Stage 5，
+  state、Stable 启动器和正在运行的 Desktop 进程链均继续指向 Stage 5。
+- 已验证：watcher 单元测试退出码 0，覆盖版号规范化、空目录、错误 architecture、错误版本、缺模型、
+  无效 SHA-256、缺必要文件、完整 Stage 5、构建命令、防重复状态和失败退避；`main.ahk /Validate` 退出码 0。
+- 已验证：真实 AHK → PowerShell Stage 5 集成入口退出码 0，watcher INI 回写当前 Store
+  `26.803.10989.0`；测试没有启动/关闭 Desktop，结束后仍只有原管理员 AHK PID 20656。
+- 待用户操作：以管理员权限手动 Reload 当前 AHK。Reload 后应新增一条 `watcher 已启动` 日志；
+  当前版本已就绪且 INI 相同，因此下一轮只读检查应安静跳过，不应重新构建或弹窗。
 - 已完成磁盘代码改造：watcher 就绪判断、构建命令、构建函数、日志和提示均已升级到 Stage 5；
   就绪门槛新增 real CLI、Shim、路由配置三个 64 位 SHA-256 manifest 字段检查。
 - 已扩展测试夹具：除空目录和错误 architecture 外，新增错误版本、缺模型、无效哈希、缺必要文件，
   并明确拒绝构建命令残留 `-StageName stage4`。自动测试结果待本轮随后执行并回填。
-- 正在将 Codex Desktop watcher 从 Stage 4 发布契约升级到 Stage 5。当前运行中的 Stable 已确认是
+- 已将 Codex Desktop watcher 从 Stage 4 发布契约升级到 Stage 5。当前运行中的 Stable 已确认是
   `stage5\app\ChatGPT.exe -> resources\codex.exe -> resources\codex-real.exe`，但磁盘 watcher 仍构建
   `-StageName stage4`；若不修正，下次 Store 更新可能发布缺少协作模式、resume 和历史修复的旧契约。
 - 本轮约束：只修改磁盘代码、测试与文档，不关闭、不替换、不 Reload 当前管理员 AHK；完成后由用户手动 Reload。
