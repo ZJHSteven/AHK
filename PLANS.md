@@ -1,5 +1,24 @@
 # ExecPlan
 
+## 2026-08-13 Codex Desktop watcher 发布协议路由 Stage 5
+
+### 当前目标
+
+- watcher 从 Stage 4 发布契约升级到当前已真实运行的 Stage 5。
+- 就绪判定必须检查 `protocol-observer-stage5`、`stage5-manifest.json`、无密钥路由配置、
+  Shim/real CLI/helper，以及何意味 Sol、何意味 Terra、DeepSeek Flash 三个已验收模型。
+- Store 更新时只在 Stage 5 构建、协议契约和必要文件全部通过后发布 `runtime/state.json`；
+  失败继续保留上一版 Stable，并沿用 30 分钟退避。
+- 不由自动化关闭、替换或 Reload 当前管理员 AHK；代码完成后由用户手动 Reload。
+
+### 验收计划
+
+1. [ ] 将就绪函数、构建函数、命令、日志和提示统一从 Stage 4 升到 Stage 5。
+2. [ ] 单元测试覆盖空目录、缺文件、错误 architecture、错误版本、缺模型和正确 Stage 5。
+3. [ ] 运行 watcher 单元测试、真实 AHK → PowerShell Stage 5 集成测试和 `main.ahk /Validate`。
+4. [ ] 只读确认当前 Desktop 仍为 Stage 5 进程链，且测试没有启动或关闭 Desktop/AHK 常驻实例。
+5. [ ] 用户手动 Reload 管理员 AHK 后，检查日志出现新的 watcher 启动记录且不触发 Stage 4 回退。
+
 ## 2026-08-13 Codex Desktop watcher 发布协议路由 Stage 4
 
 ### 当前目标

@@ -1,6 +1,10 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 正在将 Codex Desktop watcher 从 Stage 4 发布契约升级到 Stage 5。当前运行中的 Stable 已确认是
+  `stage5\app\ChatGPT.exe -> resources\codex.exe -> resources\codex-real.exe`，但磁盘 watcher 仍构建
+  `-StageName stage4`；若不修正，下次 Store 更新可能发布缺少协作模式、resume 和历史修复的旧契约。
+- 本轮约束：只修改磁盘代码、测试与文档，不关闭、不替换、不 Reload 当前管理员 AHK；完成后由用户手动 Reload。
 - 已完成并验证 Codex Desktop watcher 的 Stage 4 迁移：就绪判断要求 `protocol-observer-stage4` manifest、无密钥路由配置、shim、real CLI、原版 app.asar、全部 helper，以及何意味 Sol/Terra 与 DeepSeek Flash 三个已验收模型；构建命令使用 `-StageName stage4 -PublishState` 后再刷新 StableOnly。
 - watcher 单元测试与真实 AHK -> PowerShell Stage 4 集成测试均退出码 0；补丁器 Stage 4 已发布为 Stable，失败时仍由 staging/manifest 门槛保留上一版可用 Stable。
 - 当前常驻管理员 AHK 于 2026-08-13 00:14 重启，已解决旧实例并存；但它早于本轮 Stage 4 watcher 源码修改，因此内存中仍是 Stage 1 watcher。磁盘代码会在用户下次正常重启 AHK 后加载，不应再用非管理员 `/Validate` 强行替换管理员实例。
