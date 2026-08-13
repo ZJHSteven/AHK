@@ -1,6 +1,10 @@
 # 项目状态快照（保持短小：建议 <= 200~400 行）
 
 ## 当前结论（必须最新）
+- 已完成磁盘代码改造：watcher 就绪判断、构建命令、构建函数、日志和提示均已升级到 Stage 5；
+  就绪门槛新增 real CLI、Shim、路由配置三个 64 位 SHA-256 manifest 字段检查。
+- 已扩展测试夹具：除空目录和错误 architecture 外，新增错误版本、缺模型、无效哈希、缺必要文件，
+  并明确拒绝构建命令残留 `-StageName stage4`。自动测试结果待本轮随后执行并回填。
 - 正在将 Codex Desktop watcher 从 Stage 4 发布契约升级到 Stage 5。当前运行中的 Stable 已确认是
   `stage5\app\ChatGPT.exe -> resources\codex.exe -> resources\codex-real.exe`，但磁盘 watcher 仍构建
   `-StageName stage4`；若不修正，下次 Store 更新可能发布缺少协作模式、resume 和历史修复的旧契约。

@@ -1,9 +1,9 @@
 ; ============================================
-; Microsoft Store Codex Desktop 版本监视与协议路由 Stage 4 Clone 重建
+; Microsoft Store Codex Desktop 版本监视与协议路由 Stage 5 Clone 重建
 ; --------------------------------------------
 ; 设计目标：
 ; 1. AHK 已经常驻，因此用它的 SetTimer 每分钟执行一次轻量版号查询。
-; 2. 只有 Store 版本或 Stage 4 产物状态变化，才调用项目重建协议路由 Clone。
+; 2. 只有 Store 版本或 Stage 5 产物状态变化，才调用项目重建协议路由 Clone。
 ; 3. 不保留后台 PowerShell；每次查询启动一个极短的 NoProfile 子进程后立即退出。
 ; 4. 状态文件只保存已处理版本，不保存配置、认证或路径以外的敏感内容。
 ; ============================================
@@ -112,7 +112,7 @@ CodexDesktopPatchWatcherReadLastBuiltVersion() {
     return IniRead(g_CodexDesktopPatchWatchStatePath, "state", "last_built_version", "")
 }
 
-; 仅在 Stage 4 完整验收后写入版本，避免失败后被错误标记为已处理。
+; 仅在 Stage 5 完整验收后写入版本，避免失败后被错误标记为已处理。
 ; 旧 INI 曾经累积多个重复 [state]；这里直接原子重写唯一 section，而不是继续 IniWrite。
 CodexDesktopPatchWatcherWriteLastBuiltVersion(version) {
     global g_CodexDesktopPatchWatchStatePath
@@ -132,19 +132,22 @@ CodexDesktopPatchWatcherWriteLastBuiltVersion(version) {
     }
 }
 
-; 判断某个 Store 版本的协议路由 Stage 4 是否真的完整落盘。
-; manifest 必须声明 protocol-observer-stage4、当前版本和三个已验收虚拟模型。
+; 判断某个 Store 版本的协议路由 Stage 5 是否真的完整落盘。
+; manifest 必须声明 protocol-observer-stage5、当前版本、协议透明性校验和三个已验收虚拟模型。
+; 同时要求 manifest 中存在 real CLI、Shim 与路由配置的 SHA-256，避免“文件碰巧存在，
+; 但 manifest 不是完整构建器产物”的假就绪。这里只检查 manifest 契约；真正的哈希计算与
+; initialize/model-list 验收由 Build-CodexDesktopStage1.ps1 在发布 state.json 前完成。
 ; runtimeRoot 参数主要给自动化测试使用；日常运行不传时使用正式 runtime 目录。
-CodexDesktopPatchWatcherIsStage4Ready(version, runtimeRoot := "") {
+CodexDesktopPatchWatcherIsStage5Ready(version, runtimeRoot := "") {
     global g_CodexDesktopPatchProjectRoot
 
     if (runtimeRoot = "") {
         runtimeRoot := g_CodexDesktopPatchProjectRoot "\runtime"
     }
 
-    stageRoot := runtimeRoot "\apps\OpenAI.Codex_" version "\stage4"
+    stageRoot := runtimeRoot "\apps\OpenAI.Codex_" version "\stage5"
     appRoot := stageRoot "\app"
-    manifestPath := stageRoot "\stage4-manifest.json"
+    manifestPath := stageRoot "\stage5-manifest.json"
     requiredPaths := [
         appRoot "\ChatGPT.exe",
         appRoot "\resources\app.asar",
@@ -169,16 +172,21 @@ CodexDesktopPatchWatcherIsStage4Ready(version, runtimeRoot := "") {
         return false
     }
     escapedVersion := StrReplace(version, ".", "\.")
-    hasArchitecture := RegExMatch(manifest, '"architecture"\s*:\s*"protocol-observer-stage4"')
+    hasArchitecture := RegExMatch(manifest, '"architecture"\s*:\s*"protocol-observer-stage5"')
     hasVersion := RegExMatch(manifest, '"packageVersion"\s*:\s*"' escapedVersion '"')
     hasProtocolCheck := RegExMatch(manifest, '"protocolValidation"\s*:\s*"initialize-direct-equals-shim"')
+    hasRealCliHash := RegExMatch(manifest, '"realCliSha256"\s*:\s*"[0-9A-Fa-f]{64}"')
+    hasShimHash := RegExMatch(manifest, '"shimSha256"\s*:\s*"[0-9A-Fa-f]{64}"')
+    hasRoutesHash := RegExMatch(manifest, '"routesSha256"\s*:\s*"[0-9A-Fa-f]{64}"')
     hasHeyiweiSol := InStr(manifest, '"heyiwei::gpt-5.6-sol"')
     hasHeyiweiTerra := InStr(manifest, '"heyiwei::gpt-5.6-terra"')
     hasDeepSeekFlash := InStr(manifest, '"deepseek-v4-flash"')
-    return hasArchitecture && hasVersion && hasProtocolCheck && hasHeyiweiSol && hasHeyiweiTerra && hasDeepSeekFlash
+    return hasArchitecture && hasVersion && hasProtocolCheck
+        && hasRealCliHash && hasShimHash && hasRoutesHash
+        && hasHeyiweiSol && hasHeyiweiTerra && hasDeepSeekFlash
 }
 
-; 生成可测试的 PowerShell 命令：构建并发布 Stage 4，再生成 Stable-only 启动器。
+; 生成可测试的 PowerShell 命令：构建并发布 Stage 5，再生成 Stable-only 启动器。
 ; 整个 script block 的 stdout/stderr 都重定向到专属文件，AHK 日志会完整收录。
 CodexDesktopPatchWatcherCreateBuildCommand(forceRebuild, outputPath) {
     global g_CodexDesktopPatchProjectRoot
@@ -189,25 +197,25 @@ CodexDesktopPatchWatcherCreateBuildCommand(forceRebuild, outputPath) {
 
     quote := Chr(34)
     forceRebuildArgument := forceRebuild ? " -ForceRebuild" : ""
-    scriptBlock := "& { $ErrorActionPreference='Stop'; try { & '" buildScript "' -StageName stage4 -PublishState" forceRebuildArgument "; & '" launcherScript "' -StableOnly; exit 0 } catch { Write-Error ($_ | Out-String); exit 1 } } *> '" outputPath "'"
+    scriptBlock := "& { $ErrorActionPreference='Stop'; try { & '" buildScript "' -StageName stage5 -PublishState" forceRebuildArgument "; & '" launcherScript "' -StableOnly; exit 0 } catch { Write-Error ($_ | Out-String); exit 1 } } *> '" outputPath "'"
     return quote g_CodexDesktopPatchPowerShellPath quote " -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command " quote scriptBlock quote
 }
 
-; 调用 Stage 4 构建链。失败与成功输出都会写入 watcher 日志，便于精确定位。
-CodexDesktopPatchWatcherBuildStage4(version, forceRebuild := false) {
+; 调用 Stage 5 构建链。失败与成功输出都会写入 watcher 日志，便于精确定位。
+CodexDesktopPatchWatcherBuildStage5(version, forceRebuild := false) {
     global g_CodexDesktopPatchProjectRoot
     global g_CodexDesktopPatchPowerShellPath
 
     buildScript := g_CodexDesktopPatchProjectRoot "\scripts\Build-CodexDesktopStage1.ps1"
     launcherScript := g_CodexDesktopPatchProjectRoot "\scripts\New-CodexDesktopLaunchers.ps1"
     if !(FileExist(buildScript) && FileExist(launcherScript)) {
-        return Map("ok", false, "message", "找不到 Stage 4 构建或启动器脚本", "detail", g_CodexDesktopPatchProjectRoot)
+        return Map("ok", false, "message", "找不到 Stage 5 构建或启动器脚本", "detail", g_CodexDesktopPatchProjectRoot)
     }
     if !FileExist(g_CodexDesktopPatchPowerShellPath) {
         return Map("ok", false, "message", "找不到 PowerShell 7", "detail", g_CodexDesktopPatchPowerShellPath)
     }
 
-    outputPath := A_Temp "\codex_desktop_stage4_build_" A_TickCount ".log"
+    outputPath := A_Temp "\codex_desktop_stage5_build_" A_TickCount ".log"
     command := CodexDesktopPatchWatcherCreateBuildCommand(forceRebuild, outputPath)
     try {
         exitCode := RunWait(command, g_CodexDesktopPatchProjectRoot, "Hide")
@@ -215,17 +223,17 @@ CodexDesktopPatchWatcherBuildStage4(version, forceRebuild := false) {
     } finally {
         try FileDelete(outputPath)
     }
-    CodexDesktopPatchWatcherLog("Stage 4 构建输出：version=" version "; exit=" exitCode "`n" detail)
+    CodexDesktopPatchWatcherLog("Stage 5 构建输出：version=" version "; exit=" exitCode "`n" detail)
     if (exitCode != 0) {
-        return Map("ok", false, "message", "Stage 4 构建脚本退出码：" exitCode, "detail", detail)
+        return Map("ok", false, "message", "Stage 5 构建脚本退出码：" exitCode, "detail", detail)
     }
 
-    if !CodexDesktopPatchWatcherIsStage4Ready(version) {
-        return Map("ok", false, "message", "构建结束但 Stage 4 manifest、路由配置或必要文件不完整", "detail", detail)
+    if !CodexDesktopPatchWatcherIsStage5Ready(version) {
+        return Map("ok", false, "message", "构建结束但 Stage 5 manifest、哈希、路由配置或必要文件不完整", "detail", detail)
     }
 
     CodexDesktopPatchWatcherWriteLastBuiltVersion(version)
-    return Map("ok", true, "message", "已重建协议路由 Stage 4 " version, "detail", detail)
+    return Map("ok", true, "message", "已重建协议路由 Stage 5 " version, "detail", detail)
 }
 
 ; 定时回调：版本号与实际产物必须同时满足，才允许跳过。
@@ -236,8 +244,8 @@ CodexDesktopPatchWatcherTick() {
     }
 
     lastVersion := CodexDesktopPatchWatcherReadLastBuiltVersion()
-    stage4Ready := CodexDesktopPatchWatcherIsStage4Ready(version)
-    if (version = lastVersion && stage4Ready) {
+    stage5Ready := CodexDesktopPatchWatcherIsStage5Ready(version)
+    if (version = lastVersion && stage5Ready) {
         return
     }
 
@@ -247,11 +255,11 @@ CodexDesktopPatchWatcherTick() {
 
     ; 首次运行也必须构建。若 INI 声称当前版本已处理、但目录不完整，
     ; 则强制重建该版本，修复状态文件领先于实际 runtime 的情况。
-    result := CodexDesktopPatchWatcherBuildStage4(version, !stage4Ready)
+    result := CodexDesktopPatchWatcherBuildStage5(version, !stage5Ready)
     if result["ok"] {
         CodexDesktopPatchWatcherClearFailure()
         CodexDesktopPatchWatcherLog("构建成功：version=" version "; message=" result["message"])
-        Toast("Codex Desktop 已更新，协议路由 Stage 4 已重建：" version, 4000)
+        Toast("Codex Desktop 已更新，协议路由 Stage 5 已重建：" version, 4000)
     } else {
         CodexDesktopPatchWatcherLog("构建失败：version=" version "; message=" result["message"])
         if CodexDesktopPatchWatcherRecordFailure(version, result["message"]) {

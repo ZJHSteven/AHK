@@ -16,19 +16,19 @@ if CodexDesktopPatchWatcherNormalizeVersion(" `t26.721.4979.0`r`n") != "26.721.4
 if !FileExist(g_CodexDesktopPatchPowerShellPath) {
     throw Error("watcher 指定的 PowerShell 7 不存在：" g_CodexDesktopPatchPowerShellPath)
 }
-if !CodexDesktopPatchWatcherIsStage4Ready(version) {
-    throw Error("真实 Store 版本的协议路由 Stage 4 正式产物当前不完整：" version)
+if !CodexDesktopPatchWatcherIsStage5Ready(version) {
+    throw Error("真实 Store 版本的协议路由 Stage 5 正式产物当前不完整：" version)
 }
 
 ; 使用专属临时目录验证“状态号不能代替产物”的核心边界。
 testRoot := A_Temp "\codex_desktop_patch_watcher_tests_" A_TickCount
 testVersion := "99.88.77.66"
 try {
-    if CodexDesktopPatchWatcherIsStage4Ready(testVersion, testRoot) {
+    if CodexDesktopPatchWatcherIsStage5Ready(testVersion, testRoot) {
         throw Error("空 runtime 不应被判定为已构建")
     }
 
-    stageRoot := testRoot "\apps\OpenAI.Codex_" testVersion "\stage4"
+    stageRoot := testRoot "\apps\OpenAI.Codex_" testVersion "\stage5"
     stageApp := stageRoot "\app"
     resources := stageApp "\resources"
     DirCreate(resources)
@@ -46,23 +46,49 @@ try {
     for requiredFile in requiredFiles {
         FileAppend("test", requiredFile)
     }
-    FileAppend('{"architecture":"wrong","packageVersion":"' testVersion '","protocolValidation":"initialize-direct-equals-shim","validatedVirtualModels":["heyiwei::gpt-5.6-sol","heyiwei::gpt-5.6-terra","deepseek-v4-flash"]}', stageRoot "\stage4-manifest.json", "UTF-8")
-    if CodexDesktopPatchWatcherIsStage4Ready(testVersion, testRoot) {
+    hash64 := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    validManifest := '{"architecture":"protocol-observer-stage5","packageVersion":"' testVersion '","protocolValidation":"initialize-direct-equals-shim","realCliSha256":"' hash64 '","shimSha256":"' hash64 '","routesSha256":"' hash64 '","validatedVirtualModels":["heyiwei::gpt-5.6-sol","heyiwei::gpt-5.6-terra","deepseek-v4-flash"]}'
+    FileAppend(StrReplace(validManifest, "protocol-observer-stage5", "wrong"), stageRoot "\stage5-manifest.json", "UTF-8")
+    if CodexDesktopPatchWatcherIsStage5Ready(testVersion, testRoot) {
         throw Error("文件齐全但 architecture 错误时不应就绪")
     }
-    FileDelete(stageRoot "\stage4-manifest.json")
-    FileAppend('{"architecture":"protocol-observer-stage4","packageVersion":"' testVersion '","protocolValidation":"initialize-direct-equals-shim","validatedVirtualModels":["heyiwei::gpt-5.6-sol","heyiwei::gpt-5.6-terra","deepseek-v4-flash"]}', stageRoot "\stage4-manifest.json", "UTF-8")
-    if !CodexDesktopPatchWatcherIsStage4Ready(testVersion, testRoot) {
-        throw Error("文件、路由配置与 Stage 4 manifest 完整时应判定为已构建")
-    }
+    FileDelete(stageRoot "\stage5-manifest.json")
 
-    ; 构建命令必须发布 Stage 4 和 StableOnly，不能残留旧 NoLock 构建。
-    command := CodexDesktopPatchWatcherCreateBuildCommand(true, testRoot "\build.log")
-    if !InStr(command, "Build-CodexDesktopStage1.ps1") || !InStr(command, "-StageName stage4") || !InStr(command, "-PublishState") || !InStr(command, "-ForceRebuild") || !InStr(command, "-StableOnly") {
-        throw Error("Stage 4 构建命令缺少必要入口或参数")
+    ; 即使 architecture 正确，版本、模型或哈希契约缺失也不能发布。
+    FileAppend(StrReplace(validManifest, testVersion, "99.88.77.65"), stageRoot "\stage5-manifest.json", "UTF-8")
+    if CodexDesktopPatchWatcherIsStage5Ready(testVersion, testRoot) {
+        throw Error("manifest 版本与 Store 版本不一致时不应就绪")
     }
-    if InStr(command, "-Variant NoLock") {
-        throw Error("Stage 4 watcher 不得继续构建 NoLock")
+    FileDelete(stageRoot "\stage5-manifest.json")
+    FileAppend(StrReplace(validManifest, '"deepseek-v4-flash"', '"missing-model"'), stageRoot "\stage5-manifest.json", "UTF-8")
+    if CodexDesktopPatchWatcherIsStage5Ready(testVersion, testRoot) {
+        throw Error("缺少任一已验收虚拟模型时不应就绪")
+    }
+    FileDelete(stageRoot "\stage5-manifest.json")
+    FileAppend(StrReplace(validManifest, hash64, "SHORT", , , 1), stageRoot "\stage5-manifest.json", "UTF-8")
+    if CodexDesktopPatchWatcherIsStage5Ready(testVersion, testRoot) {
+        throw Error("manifest 缺少有效 64 位 SHA-256 时不应就绪")
+    }
+    FileDelete(stageRoot "\stage5-manifest.json")
+
+    ; 完整 Stage 5 manifest 与必要文件齐全后才允许判定为可发布。
+    FileAppend(validManifest, stageRoot "\stage5-manifest.json", "UTF-8")
+    if !CodexDesktopPatchWatcherIsStage5Ready(testVersion, testRoot) {
+        throw Error("文件、哈希、路由配置与 Stage 5 manifest 完整时应判定为已构建")
+    }
+    FileDelete(resources "\codex-real.exe")
+    if CodexDesktopPatchWatcherIsStage5Ready(testVersion, testRoot) {
+        throw Error("manifest 正确但任一必要文件缺失时不应就绪")
+    }
+    FileAppend("test", resources "\codex-real.exe")
+
+    ; 构建命令必须发布 Stage 5 和 StableOnly，不能残留 Stage 4 或旧 NoLock 构建。
+    command := CodexDesktopPatchWatcherCreateBuildCommand(true, testRoot "\build.log")
+    if !InStr(command, "Build-CodexDesktopStage1.ps1") || !InStr(command, "-StageName stage5") || !InStr(command, "-PublishState") || !InStr(command, "-ForceRebuild") || !InStr(command, "-StableOnly") {
+        throw Error("Stage 5 构建命令缺少必要入口或参数")
+    }
+    if InStr(command, "-StageName stage4") || InStr(command, "-Variant NoLock") {
+        throw Error("Stage 5 watcher 不得回退构建 Stage 4 或 NoLock")
     }
 
     ; 状态写入必须清理重复 section，只留下一个规范化版本值。
@@ -109,6 +135,6 @@ try {
     }
 }
 
-FileAppend("PASS: version=" version "; stage4-ready, routing command, state and retry checks passed`n", "*")
+FileAppend("PASS: version=" version "; stage5-ready, routing command, state and retry checks passed`n", "*")
 ; AutoHotkey 是 GUI 子系统；显式退出让 CI/PowerShell 能可靠等待测试结束，不遗留测试进程。
 ExitApp(0)
