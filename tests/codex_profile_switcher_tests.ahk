@@ -112,16 +112,6 @@ template_provider_base_url=http://42.192.94.176:5002
 template_provider_wire_api=responses
 template_provider_requires_openai_auth=true
 
-[heyiwei]
-display_name=何意味
-auth_path=secrets\heyiwei\auth.json
-config_path=secrets\heyiwei\config.toml
-template_model_provider=OpenAI
-template_provider_section_name=OpenAI
-template_provider_base_url=https://ai.websee.top
-template_provider_wire_api=responses
-template_provider_requires_openai_auth=true
-
 [right_code]
 display_name=Right Code
 auth_path=secrets\right_code\auth.json
@@ -133,7 +123,7 @@ template_provider_wire_api=responses
 template_provider_requires_openai_auth=true
     )"
     CodexProfileWriteText(root "\profiles.ini", manifest)
-    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=openai_official,haibao,heyiwei,right_code`n")
+    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=openai_official,haibao,right_code`n")
 
     CodexProfileWriteText(root "\secrets\haibao\auth.json", "{`"OPENAI_API_KEY`":`"haibao-key`"}")
     CodexProfileWriteText(root "\secrets\haibao\config.toml", "model_provider = `"OpenAI`"`nmodel = `"gpt-test`"`n")
@@ -143,8 +133,6 @@ template_provider_requires_openai_auth=true
 
     CodexProfileWriteText(root "\secrets\right_code\auth.json", "{bad json")
     CodexProfileWriteText(root "\secrets\right_code\config.toml", "model = `"broken`"`n")
-    CodexProfileWriteText(root "\secrets\heyiwei\auth.json", "{`"OPENAI_API_KEY`":`"heyiwei-key`"}")
-    CodexProfileWriteText(root "\secrets\heyiwei\config.toml", "model_provider = `"OpenAI`"`nmodel = `"gpt-heyiwei`"`n")
 
     CodexProfileWriteText(liveDir "\auth.json", "{`"OPENAI_API_KEY`":`"haibao-key`"}")
     CodexProfileWriteText(liveDir "\config.toml", "model_provider = `"OpenAI`"`nmodel = `"gpt-test`"`n")
@@ -152,12 +140,11 @@ template_provider_requires_openai_auth=true
 
 CodexProfileTestManifestParse(root) {
     profiles := CodexProfilesLoadManifest(root)
-    CodexProfileAssertEqual(profiles.Length, 4, "应解析四套预设")
+    CodexProfileAssertEqual(profiles.Length, 3, "应解析三套预设")
     CodexProfileAssertEqual(profiles[1]["id"], "openai_official", "第一套 id")
     CodexProfileAssertEqual(profiles[2]["displayName"], "海豹云-天才程序员", "第二套中文显示名")
     CodexProfileAssertTrue(InStr(profiles[1]["authPath"], "openai_official\auth.json"), "第一套 auth 路径")
-    CodexProfileAssertEqual(profiles[3]["displayName"], "何意味", "第三套中文显示名")
-    CodexProfileAssertEqual(profiles[4]["id"], "right_code", "第四套 id")
+    CodexProfileAssertEqual(profiles[3]["id"], "right_code", "第三套 id")
 }
 
 CodexProfileTestConfiguredDetection(root) {
@@ -311,35 +298,11 @@ source = '\\?\C:\Users\ZJHSteven\.codex\.tmp\bundled-marketplaces\openai-bundled
 enabled = true
     )"
 
-    heyiweiBefore := "
-    (
-model_provider = "OpenAI"
-personality = "cautious"
-model = "gpt-old-heyiwei"
-
-[model_providers]
-[model_providers.OpenAI]
-name = "OpenAI"
-base_url = "https://ai.websee.top"
-wire_api = "responses"
-requires_openai_auth = true
-
-[marketplaces]
-[marketplaces.openai-bundled]
-last_updated = "2026-01-01T00:00:00Z"
-source_type = "local"
-source = '\\?\C:\Users\ZJHSteven\.codex\.tmp\bundled-marketplaces\openai-bundled'
-
-[plugins."browser@openai-bundled"]
-enabled = true
-    )"
-
-    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=1`nmember_ids=openai_official,haibao,heyiwei,right_code`n")
+    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=1`nmember_ids=openai_official,haibao,right_code`n")
     CodexProfileWriteText(root "\secrets\haibao\config.toml", sharedSourceConfig)
     CodexProfileWriteText(root "\secrets\openai_official\config.toml", officialBefore)
     CodexProfileWriteText(root "\secrets\right_code\auth.json", "{`"OPENAI_API_KEY`":`"right-code-key`"}")
     CodexProfileWriteText(root "\secrets\right_code\config.toml", rightCodeBefore)
-    CodexProfileWriteText(root "\secrets\heyiwei\config.toml", heyiweiBefore)
     CodexProfileWriteText(liveDir "\auth.json", "{`"OPENAI_API_KEY`":`"haibao-key`",`"auth_mode`":`"login`"}")
     CodexProfileWriteText(liveDir "\config.toml", sharedSourceConfig)
 
@@ -349,14 +312,12 @@ enabled = true
     officialAfter := FileRead(root "\secrets\openai_official\config.toml", "UTF-8")
     haibaoAfter := FileRead(root "\secrets\haibao\config.toml", "UTF-8")
     rightCodeAfter := FileRead(root "\secrets\right_code\config.toml", "UTF-8")
-    heyiweiAfter := FileRead(root "\secrets\heyiwei\config.toml", "UTF-8")
 
     quotedSharedModel := "model = " Chr(34) "gpt-shared" Chr(34)
     quotedSharedUpdatedAt := "last_updated = " Chr(34) "2026-06-07T01:02:03Z" Chr(34)
     quotedOpenAIProvider := "model_provider = " Chr(34) "OpenAI" Chr(34)
     quotedOfficialBaseUrl := "base_url = " Chr(34) "https://code.rpgame.net" Chr(34)
     quotedHaibaoBaseUrl := "base_url = " Chr(34) "http://42.192.94.176:5002" Chr(34)
-    quotedTransitBaseUrl := "base_url = " Chr(34) "https://ai.websee.top" Chr(34)
     quotedRightCodeBaseUrl := "base_url = " Chr(34) "https://www.right.codes/codex/v1" Chr(34)
 
     CodexProfileAssertTrue(InStr(officialAfter, quotedSharedModel), "Official 应同步公共 model")
@@ -372,14 +333,9 @@ enabled = true
     CodexProfileAssertTrue(InStr(rightCodeAfter, quotedOpenAIProvider), "RC 应改写成 OpenAI 顶层 provider")
     CodexProfileAssertTrue(InStr(rightCodeAfter, "[model_providers.OpenAI]"), "RC 应改写成 OpenAI provider section")
     CodexProfileAssertTrue(InStr(rightCodeAfter, quotedRightCodeBaseUrl), "RC 应恢复成 Right Code URL")
-    CodexProfileAssertFalse(InStr(rightCodeAfter, quotedTransitBaseUrl), "RC 不应再被何意味 URL 覆盖")
     CodexProfileAssertFalse(InStr(rightCodeAfter, "disable_response_storage = true"), "RC 的旧私有差异应被公共模板抹平")
-    CodexProfileAssertTrue(InStr(heyiweiAfter, quotedOpenAIProvider), "何意味应改写成 OpenAI 顶层 provider")
-    CodexProfileAssertTrue(InStr(heyiweiAfter, quotedSharedModel), "何意味应同步公共 model")
-    CodexProfileAssertTrue(InStr(heyiweiAfter, quotedTransitBaseUrl), "何意味应恢复成 URL")
-    CodexProfileAssertTrue(rightCodeAfter != heyiweiAfter, "RC 与何意味生成后的 config 不应完全相同")
 
-    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=openai_official,haibao,heyiwei,right_code`n")
+    CodexProfileWriteText(root "\settings.ini", "[shared_template]`nenabled=0`nmember_ids=openai_official,haibao,right_code`n")
     CodexProfileWriteText(root "\secrets\right_code\auth.json", "{bad json")
 }
 
