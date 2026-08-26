@@ -1,5 +1,23 @@
 # ExecPlan
 
+## 2026-08-26 AHK 降权、UIAccess 与管理员 Broker 第一版
+
+### 当前目标
+
+- 将常驻 `main.ahk` 从 Task Scheduler 的管理员权限运行迁移为 `AutoHotkey64_UIA.exe` + 普通用户权限，保留管理员窗口热键能力。
+- 清理旧 `/Validate` 兼容代码，建立主进程统一轮转日志；任何改动先经过解释器原生 `/Validate`，再切换常驻实例。
+- 保留 Windows Task Scheduler 作为稳定启动/恢复后端，不再把频繁开发的 AHK 提升为系统调度根节点。
+- 另建管理员 Broker/CLI 项目：第一版只支持 PowerShell 7 任意命令，输入 command/reason/effect，经一次性 PI + GPT-5.6 Luna 审批后触发高权限 Broker 执行，并完整记录审批与执行日志。
+- 安装现代 Task Scheduler 前端，优先采用直接包装系统 Task Scheduler API 的开源实现。
+
+### 验收计划
+
+1. [ ] `main.ahk` 移除历史 `/Validate` 参数分支，新增启动/退出/未处理错误日志与按日/大小/保留天数轮转。
+2. [ ] 全仓 AHK 回归与 `AutoHotkey64.exe /ErrorStdOut=UTF-8 /Validate main.ahk` 通过。
+3. [ ] Task Scheduler Action 改为 `AutoHotkey64_UIA.exe`，RunLevel 改为 Limited；现场确认唯一主 AHK 为 UIAccess 且非管理员。
+4. [ ] 安装并冒烟验证现代 Task Scheduler 前端。
+5. [ ] 新建 Broker/CLI 项目，完成 PowerShell 7 执行、PI/Luna 审批、日志和管理员任务注册；用无害管理员命令端到端验收。
+
 ## 2026-08-13 Codex Desktop watcher 发布协议路由 Stage 5
 
 ### 当前目标
