@@ -16,11 +16,66 @@ AhkRuntimeLoggerInitialize() {
     OnError(AhkRuntimeHandleUnhandledError)
     OnExit(AhkRuntimeHandleExit)
 
+    tokenState := AhkRuntimeGetOwnTokenState()
     AhkRuntimeLog("INFO", "AHK 主进程启动"
         . " | pid=" ProcessExist()
         . " | ahk=" A_AhkVersion
         . " | exe=" A_AhkPath
-        . " | admin=" (A_IsAdmin ? "yes" : "no"))
+        . " | userIsAdminMember=" (A_IsAdmin ? "yes" : "no")
+        . " | tokenElevated=" tokenState.elevated
+        . " | elevationType=" tokenState.elevationType
+        . " | integrityRid=" tokenState.integrityRid)
+}
+
+AhkRuntimeGetOwnTokenState() {
+    ; A_IsAdmin 只反映当前用户是否具有管理员身份，不能用来判断当前进程 token 是否真正 elevated。
+    ; 这里直接读取 Windows access token：
+    ; - TokenElevation(20)：当前 token 是否 elevated；
+    ; - TokenElevationType(18)：1=Default，2=Full，3=Limited；
+    ; - TokenIntegrityLevel(25)：记录完整性级别 SID 最后一个 RID，便于区分 Medium/UIAccess/High。
+    result := {elevated: "unknown", elevationType: "unknown", integrityRid: "unknown"}
+    token := 0
+
+    try {
+        if !DllCall("Advapi32\OpenProcessToken", "Ptr", DllCall("GetCurrentProcess", "Ptr"), "UInt", 0x0008, "Ptr*", &token)
+            return result
+
+        elevation := Buffer(4, 0)
+        returned := 0
+        if DllCall("Advapi32\GetTokenInformation", "Ptr", token, "Int", 20, "Ptr", elevation, "UInt", elevation.Size, "UInt*", &returned)
+            result.elevated := NumGet(elevation, 0, "UInt") ? "yes" : "no"
+
+        elevationType := Buffer(4, 0)
+        returned := 0
+        if DllCall("Advapi32\GetTokenInformation", "Ptr", token, "Int", 18, "Ptr", elevationType, "UInt", elevationType.Size, "UInt*", &returned)
+            result.elevationType := NumGet(elevationType, 0, "UInt")
+
+        needed := 0
+        DllCall("Advapi32\GetTokenInformation", "Ptr", token, "Int", 25, "Ptr", 0, "UInt", 0, "UInt*", &needed)
+        if needed > 0 {
+            integrity := Buffer(needed, 0)
+            if DllCall("Advapi32\GetTokenInformation", "Ptr", token, "Int", 25, "Ptr", integrity, "UInt", integrity.Size, "UInt*", &needed) {
+                ; TOKEN_MANDATORY_LABEL 的首字段就是 SID_AND_ATTRIBUTES，其中第一个成员是 SID 指针。
+                sid := NumGet(integrity, 0, "Ptr")
+                countPtr := DllCall("Advapi32\GetSidSubAuthorityCount", "Ptr", sid, "Ptr")
+                if countPtr {
+                    count := NumGet(countPtr, 0, "UChar")
+                    if count > 0 {
+                        ridPtr := DllCall("Advapi32\GetSidSubAuthority", "Ptr", sid, "UInt", count - 1, "Ptr")
+                        if ridPtr
+                            result.integrityRid := Format("0x{:X}", NumGet(ridPtr, 0, "UInt"))
+                    }
+                }
+            }
+        }
+    } catch {
+        ; 仅诊断；任何 token 查询失败都不能影响主 AHK。
+    } finally {
+        if token
+            DllCall("CloseHandle", "Ptr", token)
+    }
+
+    return result
 }
 
 AhkRuntimeHandleUnhandledError(err, mode) {
