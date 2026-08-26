@@ -9,14 +9,11 @@
 ; 让相对路径以本脚本所在目录为基准
 SetWorkingDir A_ScriptDir
 
-; CI / 本地回归可用的无副作用语法校验入口。
-; AHK 会在执行前解析本文件及所有 #Include，因此立刻退出仍能覆盖主脚本和模块语法；
-; 同时避免过去把 `/Validate` 当普通参数传入、意外额外启动一套定时 watcher。
-if (A_Args.Length = 1 && A_Args[1] = "/Validate") {
-    ExitApp
-}
+; 语法校验统一使用 AutoHotkey v2 原生 `/Validate` 解释器开关。
+; 不再把 `/Validate` 当成脚本参数处理，避免维护两套校验语义。
 
 ; ---- 引入模块 ----
+#Include modules\logger.ahk
 #Include modules\utils.ahk
 #Include modules\codex_profile_switcher.ahk
 #Include modules\codex_desktop_patch_watcher.ahk
@@ -26,6 +23,11 @@ if (A_Args.Length = 1 && A_Args[1] = "/Validate") {
 #Include modules\window_switch.ahk
 ;#Include modules\llc_hold_speed.ahk
 ; #Include modules\watch_downloads.ahk
+
+; ---- 初始化主进程运行时 ----
+; 主日志先于其他模块初始化，保证后续未处理错误、Reload 和退出都有审计记录。
+AhkRuntimeLoggerInitialize()
+A_IconTip := "ZH AHK 主控（UIAccess）"
 
 ; ---- 初始化托盘菜单 ----
 ; 这里统一挂载“查看热键”和“Codex 预设切换”入口。
