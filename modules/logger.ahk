@@ -20,7 +20,7 @@ AhkRuntimeLoggerInitialize() {
         . " | pid=" ProcessExist()
         . " | ahk=" A_AhkVersion
         . " | exe=" A_AhkPath
-        . " | admin=" (A_IsAdmin ? "yes" : "no"))
+        . " | userIsAdminMember=" (A_IsAdmin ? "yes" : "no"))
 }
 
 AhkRuntimeHandleUnhandledError(err, mode) {
